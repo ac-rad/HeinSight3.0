@@ -1,9 +1,9 @@
 #!/bin/bash
 #SBATCH --time=00:60:00
-#SBATCH --gres=gpu:8
-#SBATCH --cpus-per-task=32
+#SBATCH --gres=gpu:1
+#SBATCH --cpus-per-task=4
 #SBATCH --ntasks=1
-#SBATCH --mem=32000M
+#SBATCH --mem=2000M
 #SBATCH --job-name=objectDetection
 #SBATCH --output=./logs/output_%j.log
 #SBATCH --error=./errors/error_%j.err
