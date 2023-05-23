@@ -23,7 +23,7 @@ def build_sam_model(cfg):
     """
     ckpt_path = cfg.MODEL.CKPT_PATH
     device = torch.device(cfg.MODEL.DEVICE)
-    model = sam_builder.build_sam_vit_h(checkpoint=ckpt_path)
+    model = sam_builder.build_sam_vit_b(checkpoint=ckpt_path)
     return model.to(device)
 
 
