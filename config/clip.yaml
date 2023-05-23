@@ -1,6 +1,6 @@
 MODEL:
     CKPT_DIR: './pretrained/clip'
-    DEVICE: 'cuda'
+    DEVICE: 'cpu'
     NAME: 'ViT-B/32'
 LOG:
     SAVE_DIR: './log'
