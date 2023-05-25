@@ -108,7 +108,7 @@ def segment_video():
     cap = cv2.VideoCapture(input_image_path)
     if cap.isOpened():
         ret, frame = cap.read()
-        cv2.imwrite(frame, "one_frame_tmp.jpg")
+        cv2.imwrite("./data/test_images/one_frame_tmp.jpg", frame)
         cap.release()
 
     # init cluster
@@ -116,7 +116,7 @@ def segment_video():
     segmentor = build_sam_clip_text_ins_segmentor(cfg=insseg_cfg)
     LOG.info('Segmentor initialized complete')
     LOG.info('Start to segment input image ...')
-    ret = segmentor.seg_image(input_image_path, unique_label=unique_labels, use_text_prefix=use_text_prefix)
+    ret = segmentor.seg_image("./data/test_images/one_frame_tmp.jpg", unique_label=unique_labels, use_text_prefix=use_text_prefix)
     LOG.info(f'segment complete, masks found: {len(ret["masks"])}')
     mask = ret['masks']
     for i in range(len(masks)):
