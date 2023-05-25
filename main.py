@@ -117,7 +117,7 @@ def segment_video():
     LOG.info('Segmentor initialized complete')
     LOG.info('Start to segment input image ...')
     ret = segmentor.seg_image(input_image_path, unique_label=unique_labels, use_text_prefix=use_text_prefix)
-    LOG.info('segment complete')
+    LOG.info(f'segment complete, masks found: {len(ret["masks"])}')
     mask = ret['masks']
     for i in range(len(masks)):
         LOG.info(f'Creating video segment {i+1} of {len(masks)}')
@@ -140,4 +140,4 @@ if __name__ == '__main__':
     """
     main func
     """
-    main()
+    segment_video()
