@@ -190,7 +190,8 @@ class SamClipInsSegmentor(object):
             'ins_seg_mask': ins_seg_mask,
             'ins_seg_add': ins_seg_add,
             'raw_masks': masks['segmentations'],
-            'bbox': masks['bboxes']
+            'bbox': masks['bboxes'],
+            'bboxes_names' = masks['bbox_cls_names']
         }
 
         return ret

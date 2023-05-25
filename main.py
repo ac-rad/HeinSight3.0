@@ -119,9 +119,13 @@ def segment_video():
     ret = segmentor.seg_image("./data/test_images/one_frame_tmp.jpg", unique_label=unique_labels, use_text_prefix=use_text_prefix)
     LOG.info(f'segment complete, masks found: {len(ret["raw_masks"])}')
     LOG.info(f'segment complete, masks found: {len(ret["bbox"])}')
-    mask = ret['raw_masks']
+    masks = ret['raw_masks']
+    save_dir = args.save_dir
+    os.makedirs(save_dir, exist_ok=True)
+    mask_save_path = ops.join(save_dir, '{:s}_insseg_mask.png'.format(input_image_name.split('.')[0]))
+    cv2.imwrite(mask_save_path, ret['ins_seg_mask'])
     for i in range(len(masks)):
-        LOG.info(f'Creating video segment {i+1} of {len(masks)}')
+        LOG.info(f'Creating video segment {i+1} of {len(masks)}: {ret["bboxes_names"][i]}')
 
     # save cluster result
     # save_dir = args.save_dir
