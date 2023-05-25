@@ -86,6 +86,56 @@ def main():
     return
 
 
+def segment_video():
+    args = init_args()
+    input_image_path = args.input_image_path
+    input_image_name = ops.split(input_image_path)[1]
+    if not ops.exists(input_image_path):
+        LOG.error('input video path: {:s} not exists'.format(input_image_path))
+        return
+    insseg_cfg_path = args.insseg_cfg_path
+    if not ops.exists(insseg_cfg_path):
+        LOG.error('input innseg cfg path: {:s} not exists'.format(insseg_cfg_path))
+        return
+    insseg_cfg = parse_config_utils.Config(config_path=insseg_cfg_path)
+    if args.text is not None:
+        unique_labels = args.text.split(',')
+    else:
+        unique_labels = None
+    if args.cls_score_thresh is not None:
+        insseg_cfg.INS_SEG.CLS_SCORE_THRESH = args.cls_score_thresh
+    use_text_prefix = True if args.use_text_prefix else False
+    cap = cv2.VideoCapture(input_image_path)
+    if cap.isOpened():
+        ret, frame = cap.read()
+        cv2.imwrite(frame, "one_frame_tmp.jpg")
+        cap.release()
+
+    # init cluster
+    LOG.info('Start initializing instance segmentor ...')
+    segmentor = build_sam_clip_text_ins_segmentor(cfg=insseg_cfg)
+    LOG.info('Segmentor initialized complete')
+    LOG.info('Start to segment input image ...')
+    ret = segmentor.seg_image(input_image_path, unique_label=unique_labels, use_text_prefix=use_text_prefix)
+    LOG.info('segment complete')
+    mask = ret['masks']
+    for i in range(len(masks)):
+        LOG.info(f'Creating video segment {i+1} of {len(masks)}')
+
+    # save cluster result
+    # save_dir = args.save_dir
+    # os.makedirs(save_dir, exist_ok=True)
+    # ori_image_save_path = ops.join(save_dir, input_image_name)
+    # cv2.imwrite(ori_image_save_path, ret['source'])
+    # mask_save_path = ops.join(save_dir, '{:s}_insseg_mask.png'.format(input_image_name.split('.')[0]))
+    # cv2.imwrite(mask_save_path, ret['ins_seg_mask'])
+    # mask_add_save_path = ops.join(save_dir, '{:s}_insseg_add.png'.format(input_image_name.split('.')[0]))
+    # cv2.imwrite(mask_add_save_path, ret['ins_seg_add'])
+    #
+    # LOG.info('save segment and cluster result into {:s}'.format(save_dir))
+
+    return
+
 if __name__ == '__main__':
     """
     main func

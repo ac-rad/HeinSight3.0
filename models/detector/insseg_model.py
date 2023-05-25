@@ -56,7 +56,7 @@ class SamClipInsSegmentor(object):
         :return:
         """
         masks = self.mask_generator.generate(input_image)
-        most_stable_mask = sorted(masks, key=lambda d: d['area'])
+        most_stable_mask = sorted(masks, key=lambda d: d['stability_score'])
         if len(most_stable_mask) > self.top_k_objs:
             most_stable_mask = most_stable_mask[-self.top_k_objs:]
         sam_masks = {
@@ -188,7 +188,9 @@ class SamClipInsSegmentor(object):
         ret = {
             'source': input_image,
             'ins_seg_mask': ins_seg_mask,
-            'ins_seg_add': ins_seg_add
+            'ins_seg_add': ins_seg_add,
+            'raw_masks': masks['segmentations'],
+            'bbox': masks['bboxes']
         }
 
         return ret
