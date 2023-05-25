@@ -117,8 +117,9 @@ def segment_video():
     LOG.info('Segmentor initialized complete')
     LOG.info('Start to segment input image ...')
     ret = segmentor.seg_image("./data/test_images/one_frame_tmp.jpg", unique_label=unique_labels, use_text_prefix=use_text_prefix)
-    LOG.info(f'segment complete, masks found: {len(ret["masks"])}')
-    mask = ret['masks']
+    LOG.info(f'segment complete, masks found: {len(ret["raw_masks"])}')
+    LOG.info(f'segment complete, masks found: {len(ret["bbox"])}')
+    mask = ret['raw_masks']
     for i in range(len(masks)):
         LOG.info(f'Creating video segment {i+1} of {len(masks)}')
 
