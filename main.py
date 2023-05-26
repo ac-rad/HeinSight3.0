@@ -171,7 +171,7 @@ def segment_video():
     if cap.isOpened():
         ret, frame = cap.read()
         resized_frame = cv2.resize(frame, (1280, 720))
-        cv2.imwrite("./data/test_images/one_frame_tmp.jpg", resized_frame)
+        cv2.imwrite(f"./data/test_images/{input_image_name.split('.')[0]}_one_frame_tmp.jpg", resized_frame)
         cap.release()
 
     # init cluster
@@ -179,8 +179,9 @@ def segment_video():
     segmentor = build_sam_clip_text_ins_segmentor(cfg=insseg_cfg)
     LOG.info('Segmentor initialized complete')
     LOG.info('Start to segment input image ...')
-    ret = segmentor.seg_image("./data/test_images/one_frame_tmp.jpg", unique_label=unique_labels, use_text_prefix=use_text_prefix)
+    ret = segmentor.seg_image(f"./data/test_images/{input_image_name.split('.')[0]}_one_frame_tmp.jpg", unique_label=unique_labels, use_text_prefix=use_text_prefix)
     masks = ret['raw_masks']
+    cv2.imwrite(f"./output/insseg/{input_image_name.split('.')[0]}_one_frame_tmp.jpg", ret['ins_seg_add'])
     vial_bbox = []
     for i in range(len(masks)):
         if ret["bboxes_names"][i]=="vial":
@@ -189,8 +190,8 @@ def segment_video():
     LOG.info(f'Initializing HeinSight2.0')
     predictor = initialize_rcnn()
 
-    writer1 = imageio.get_writer(f'./output/insseg/uncrop_segment.mp4', fps=60)
-    writer2 = imageio.get_writer(f'./output/insseg/crop_segment.mp4', fps=60)
+    writer1 = imageio.get_writer(f"./output/insseg/uncrop_{input_image_name.split('.')[0]}.mp4", fps=60)
+    writer2 = imageio.get_writer(f"./output/insseg/crop_{input_image_name.split('.')[0]}.mp4", fps=60)
     cap = cv2.VideoCapture(input_image_path)
     LOG.info(f'Analysing Video')
     while cap.isOpened():
