@@ -144,7 +144,7 @@ def eval(im, boxes, predictor):
         v_uncropped.draw_text(str(classes[uncropped_outputs["instances"].pred_classes[i]]), tuple(box[:2].numpy()),
                     color=colors[uncropped_outputs["instances"].pred_classes[i]])
         i += 1
-    return v_uncropped.get_output.get_image()[:, :, ::-1], v_cropped.get_output.get_image()[:, :, ::-1]
+    return v_uncropped.get_output().get_image()[:, :, ::-1], v_cropped.get_output().get_image()[:, :, ::-1]
 
 
 def segment_video():
