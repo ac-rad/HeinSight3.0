@@ -14,7 +14,7 @@ import argparse
 from PIL import Image
 import imageio
 import cv2
-
+import torch
 from local_utils.log_util import init_logger
 from local_utils.config_utils import parse_config_utils
 from models import build_sam_clip_text_ins_segmentor
@@ -133,6 +133,7 @@ def eval(im, boxes, predictor):
         outputs = predictor(seg)
         i = 0
         for boxp in outputs["instances"].pred_boxes.to('cpu'):
+            boxp = boxp + torch.Tensor([x, y, x, y]).to('cpu')
             v_cropped.draw_box(boxp, edge_color=colors[outputs["instances"].pred_classes[i]])
             v_cropped.draw_text(str(classes[outputs["instances"].pred_classes[i]]), tuple(boxp[:2].numpy()),
                                   color=colors[outputs["instances"].pred_classes[i]])
@@ -144,7 +145,7 @@ def eval(im, boxes, predictor):
         v_uncropped.draw_text(str(classes[uncropped_outputs["instances"].pred_classes[i]]), tuple(box[:2].numpy()),
                     color=colors[uncropped_outputs["instances"].pred_classes[i]])
         i += 1
-    return v_uncropped.get_output().get_image()[:, :, ::-1], v_cropped.get_output().get_image()[:, :, ::-1]
+    return v_uncropped.get_output().get_image(), v_cropped.get_output().get_image()
 
 
 def segment_video():
@@ -169,7 +170,8 @@ def segment_video():
     cap = cv2.VideoCapture(input_image_path)
     if cap.isOpened():
         ret, frame = cap.read()
-        cv2.imwrite("./data/test_images/one_frame_tmp.jpg", frame)
+        resized_frame = cv2.resize(frame, (1280, 720))
+        cv2.imwrite("./data/test_images/one_frame_tmp.jpg", resized_frame)
         cap.release()
 
     # init cluster
@@ -195,7 +197,8 @@ def segment_video():
         ret, frame = cap.read()
         if ret:
             frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            uncrop_im, crop_im = eval(frame, vial_bbox, predictor)
+            resized_frame = cv2.resize(frame, (1280, 720))
+            uncrop_im, crop_im = eval(resized_frame, vial_bbox, predictor)
             writer1.append_data(uncrop_im)
             writer2.append_data(crop_im)
         else:
