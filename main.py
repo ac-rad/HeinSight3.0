@@ -132,14 +132,14 @@ def eval(im, boxes, predictor):
         seg = im[y:y+h, x:x+w]
         outputs = predictor(seg)
         i = 0
-        for boxp in outputs["instances"].pred_boxes:
+        for boxp in outputs["instances"].pred_boxes.to('cpu'):
             v_cropped.draw_box(boxp, edge_color=colors[outputs["instances"].pred_classes[i]])
             v_cropped.draw_text(str(classes[outputs["instances"].pred_classes[i]]), tuple(box[:2].numpy()),
                                   color=colors[outputs["instances"].pred_classes[i]])
             i += 1
 
     i = 0
-    for box in uncropped_outputs["instances"].pred_boxes:
+    for box in uncropped_outputs["instances"].pred_boxes.to('cpu'):
         v_uncropped.draw_box(box, edge_color=colors[uncropped_outputs["instances"].pred_classes[i]])
         v_uncropped.draw_text(str(classes[uncropped_outputs["instances"].pred_classes[i]]), tuple(box[:2].numpy()),
                     color=colors[uncropped_outputs["instances"].pred_classes[i]])
