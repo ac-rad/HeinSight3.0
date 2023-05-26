@@ -181,7 +181,7 @@ def segment_video():
     masks = ret['raw_masks']
     vial_bbox = []
     for i in range(len(masks)):
-        if ret["bboxes_names"][i]=="vial"
+        if ret["bboxes_names"][i]=="vial":
             vial_bbox.append(ret["bbox"][i])
     LOG.info(f'segment complete, masks found: {len(vial_bbox)}')
     LOG.info(f'Initializing HeinSight2.0')
