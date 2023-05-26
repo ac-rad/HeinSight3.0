@@ -21,8 +21,8 @@ from models import build_sam_clip_text_ins_segmentor
 from detectron2 import model_zoo
 from detectron2.engine import DefaultPredictor
 from detectron2.config import get_cfg
-from visualizer import Visualizer
-from visualizer import ColorMode
+from detectron2.utils.visualizer import Visualizer
+from detectron2.utils.visualizer import ColorMode
 from detectron2.data import MetadataCatalog
 
 classes = ["Homogeneous Reaction", "Heterogeneous Reaction", "Residue", "Bubble", "Droplet", "Empty"]
