@@ -134,7 +134,7 @@ def eval(im, boxes, predictor):
         i = 0
         for boxp in outputs["instances"].pred_boxes.to('cpu'):
             v_cropped.draw_box(boxp, edge_color=colors[outputs["instances"].pred_classes[i]])
-            v_cropped.draw_text(str(classes[outputs["instances"].pred_classes[i]]), tuple(box[:2].numpy()),
+            v_cropped.draw_text(str(classes[outputs["instances"].pred_classes[i]]), tuple(boxp[:2].numpy()),
                                   color=colors[outputs["instances"].pred_classes[i]])
             i += 1
 
