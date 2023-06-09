@@ -25,13 +25,12 @@ from detectron2.utils.visualizer import Visualizer
 from detectron2.utils.visualizer import ColorMode
 from detectron2.data import MetadataCatalog
 
-classes = ["Homogeneous Reaction", "Heterogeneous Reaction", "Residue", "Bubble", "Droplet", "Empty"]
+classes = ["Homogeneous Reaction", "Heterogeneous Reaction", "Residue", "Empty"]
 colors = [(189/255.0, 16/255.0, 224/255.0), (245/255.0, 166/255.0, 35/255.0), (110/255.0, 226/255.0, 105/255.0), (248/255.0, 231/255.0, 28/255.0), (0/255.0, 60/255.0, 255/255.0), (0/255.0, 60/255.0, 255/255.0)]
 
 LOG = init_logger.get_logger('instance_seg.log')
 MetadataCatalog.get("LLDataset").set(
-    thing_classes=["Homogeneous Reaction", "Heterogeneous Reaction", "Residue", "Bubble", "Droplet",
-                   "Empty"]).set(
+    thing_classes=["Homogeneous Reaction", "Heterogeneous Reaction", "Residue", "Empty"]).set(
     thing_colors=[(189, 16, 224), (245, 166, 35), (110, 226, 105), (248, 231, 28), (0, 60, 255),
                   (200, 200, 200)])
 LLDatasetMetadate = MetadataCatalog.get("LLDataset")
@@ -103,9 +102,9 @@ def main():
 def initialize_rcnn():
     cfg = get_cfg()
     cfg.merge_from_file(model_zoo.get_config_file("COCO-InstanceSegmentation/mask_rcnn_R_101_FPN_3x.yaml"))
-    cfg.MODEL.ROI_HEADS.NUM_CLASSES = 6
+    cfg.MODEL.ROI_HEADS.NUM_CLASSES = 4
     cfg.MODEL.ROI_HEADS.NMS_THRESH_TEST = 0.1
-    cfg.MODEL.WEIGHTS = "2023_05_15-16_47_13_weights.pth"  # path to the model we just trained
+    cfg.MODEL.WEIGHTS = "model_final.pth"  # path to the model we just trained
     cfg.MODEL.ROI_HEADS.SCORE_THRESH_TEST = 0.7  # set a custom testing threshold
     cfg.TEST.DETECTIONS_PER_IMAGE = 4
     cfg.MODEL.DEVICE = "cuda"
