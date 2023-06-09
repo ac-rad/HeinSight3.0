@@ -22,6 +22,36 @@ Download pretrained model weights
 cd PROJECT_ROOT_DIR
 bash scripts/download_pretrained_ckpt.sh
 ```
+# Segment-Anything-U-Specify + Heinsight2.0
+## Installation
+
+Install python packages via commands (SAM):
+```
+pip3 install -r requirements.txt
+```
+Download pretrained model weights (SAM+CLIP)
+```
+cd PROJECT_ROOT_DIR
+bash scripts/download_pretrained_ckpt.sh
+```
+Install python packages for HeinSight:
+```
+pip3 install 'git+https://github.com/facebookresearch/detectron2.git'
+```
+Place the pre-trained HeinSight RCNN model weights in root folder:
+```
+./2023_05_15-16_47_13_weights.pth
+```
+## Instance Segmentation with video:
+Place the video in ./data/test_images.
+Then from root run
+```
+python3 main.py --input_image_path <path of video> --text vial
+```
+Example
+```
+python3 main.py --input_image_path ./data/test_images/hetro_homo_cap_flash.mp4 --text vial
+```
 
 ## Instance Segmentation With Text Prompts
 Instance segmentor first using sam model to get all obj's mask of the input image. Second using clip model to classify each mask with both
