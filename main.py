@@ -112,22 +112,23 @@ def initialize_rcnn():
     return predictor
 
 
-def eval(im, boxes, predictor):
+def eval(im, boxes, predictor, scale=1.0):
     uncropped_outputs = predictor(im)
     v_cropped = Visualizer(im,
                              metadata=LLDatasetMetadate,
-                             scale=.6,
+                             scale=.5,
                              instance_mode=ColorMode.SEGMENTATION
                              # remove the colors of unsegmented pixels. This option is only available for segmentation models
                              )
     v_uncropped = Visualizer(im,
                              metadata=LLDatasetMetadate,
-                             scale=.6,
+                             scale=.5,
                              instance_mode=ColorMode.SEGMENTATION
                              # remove the colors of unsegmented pixels. This option is only available for segmentation models
                              )
     for box in boxes:
         x, y, w, h, = box
+        x, y, w, h = x*scale, y*scale, w*scale, h*scale
         seg = im[y:y+h, x:x+w]
         outputs = predictor(seg)
         i = 0
@@ -197,8 +198,9 @@ def segment_video():
         ret, frame = cap.read()
         if ret:
             frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            resized_frame = cv2.resize(frame, (1280, 720))
-            uncrop_im, crop_im = eval(resized_frame, vial_bbox, predictor)
+            scale = 2560.0/1280.0
+            resized_frame = cv2.resize(frame, (2560, 1440))
+            uncrop_im, crop_im = eval(resized_frame, vial_bbox, predictor, scale=scale)
             writer1.append_data(uncrop_im)
             writer2.append_data(crop_im)
         else:
