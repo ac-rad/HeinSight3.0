@@ -25,8 +25,8 @@ from detectron2.utils.visualizer import Visualizer
 from detectron2.utils.visualizer import ColorMode
 from detectron2.data import MetadataCatalog
 
-classes = ["Homogeneous Reaction", "Heterogeneous Reaction", "Residue", "Empty", "Solid"]
-colors = [(189/255.0, 16/255.0, 224/255.0), (245/255.0, 166/255.0, 35/255.0), (110/255.0, 226/255.0, 105/255.0), (248/255.0, 231/255.0, 28/255.0), (0/255.0, 60/255.0, 255/255.0), (0/255.0, 60/255.0, 255/255.0)]
+classes = ["Homogeneous Reaction", "Heterogeneous Reaction", "Residue", "Empty", "Solid", "StirBar"]
+colors = [(189/255.0, 16/255.0, 224/255.0), (245/255.0, 166/255.0, 35/255.0), (110/255.0, 226/255.0, 105/255.0), (248/255.0, 231/255.0, 28/255.0), (0/255.0, 60/255.0, 255/255.0), (60/255.0, 60/255.0, 60/255.0)]
 
 
 solid_classes = ["Residue", "Solid", "StirBar"]
