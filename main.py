@@ -28,11 +28,17 @@ from detectron2.data import MetadataCatalog
 classes = ["Homogeneous Reaction", "Heterogeneous Reaction", "Residue", "Empty", "Solid"]
 colors = [(189/255.0, 16/255.0, 224/255.0), (245/255.0, 166/255.0, 35/255.0), (110/255.0, 226/255.0, 105/255.0), (248/255.0, 231/255.0, 28/255.0), (0/255.0, 60/255.0, 255/255.0), (0/255.0, 60/255.0, 255/255.0)]
 
+
+solid_classes = ["Residue", "Solid", "StirBar"]
+solid_colors = [(189/255.0, 16/255.0, 224/255.0), (245/255.0, 166/255.0, 35/255.0), (110/255.0, 226/255.0, 105/255.0)]
+liquid_classes = ["Homogeneous Reaction", "Heterogeneous Reaction", "Empty"]
+liquid_colors = [(248/255.0, 231/255.0, 28/255.0), (0/255.0, 60/255.0, 255/255.0), (60/255.0, 60/255.0, 60/255.0)]
+
+
 LOG = init_logger.get_logger('instance_seg.log')
 MetadataCatalog.get("LLDataset").set(
-    thing_classes=["Homogeneous Reaction", "Heterogeneous Reaction", "Residue", "Empty", "Solid"]).set(
-    thing_colors=[(189, 16, 224), (245, 166, 35), (110, 226, 105), (248, 231, 28), (0, 60, 255),
-                  (200, 200, 200)])
+    thing_classes=["Homogeneous Reaction", "Heterogeneous Reaction", "Residue", "Empty", "Solid", "StirBar"]).set(
+    thing_colors=[(248, 231, 28), (0, 60, 255), (189, 16, 224), (60, 60, 60), (245, 166, 35), (110, 226, 105)])
 LLDatasetMetadate = MetadataCatalog.get("LLDataset")
 
 
@@ -102,18 +108,28 @@ def main():
 def initialize_rcnn():
     cfg = get_cfg()
     cfg.merge_from_file(model_zoo.get_config_file("COCO-InstanceSegmentation/mask_rcnn_R_101_FPN_3x.yaml"))
-    cfg.MODEL.ROI_HEADS.NUM_CLASSES = 5
-    cfg.MODEL.ROI_HEADS.NMS_THRESH_TEST = 0.2
-    cfg.MODEL.WEIGHTS = "model_final.pth"  # path to the model we just trained
-    cfg.MODEL.ROI_HEADS.SCORE_THRESH_TEST = 0.5  # set a custom testing threshold
+    cfg.MODEL.ROI_HEADS.NUM_CLASSES = 3
+    cfg.MODEL.ROI_HEADS.NMS_THRESH_TEST = 0.1
+    cfg.MODEL.WEIGHTS = "liquid/model_final.pth"  # path to the model we just trained
+    cfg.MODEL.ROI_HEADS.SCORE_THRESH_TEST = 0.7  # set a custom testing threshold
+    cfg.TEST.DETECTIONS_PER_IMAGE = 4
+    cfg.MODEL.DEVICE = "cuda"
+    liquid_predictor = DefaultPredictor(cfg)
+    cfg = get_cfg()
+    cfg.merge_from_file(model_zoo.get_config_file("COCO-InstanceSegmentation/mask_rcnn_R_101_FPN_3x.yaml"))
+    cfg.MODEL.ROI_HEADS.NUM_CLASSES = 3
+    cfg.MODEL.ROI_HEADS.NMS_THRESH_TEST = 0.1
+    cfg.MODEL.WEIGHTS = "solid/model_final.pth"  # path to the model we just trained
+    cfg.MODEL.ROI_HEADS.SCORE_THRESH_TEST = 0.7  # set a custom testing threshold
     cfg.TEST.DETECTIONS_PER_IMAGE = 10
     cfg.MODEL.DEVICE = "cuda"
-    predictor = DefaultPredictor(cfg)
-    return predictor
+    solid_predictor = DefaultPredictor(cfg)
+    return liquid_predictor, solid_predictor
 
 
-def eval(im, boxes, predictor, scale=1.0):
-    uncropped_outputs = predictor(im)
+def eval(im, boxes, liquid_predictor, solid_predictor, scale=1.0):
+    solid_uncropped_outputs = solid_predictor(im)
+    liquid_uncropped_outputs = liquid_predictor(im)
     v_cropped = Visualizer(im,
                              metadata=LLDatasetMetadate,
                              scale=.5,
@@ -128,22 +144,37 @@ def eval(im, boxes, predictor, scale=1.0):
                              )
     for box in boxes:
         x, y, w, h, = box
-        x, y, w, h = x*scale, y*scale, w*scale, h*scale
+        x, y, w, h = int(x*scale), int(y*scale), int(w*scale), int(h*scale)
         seg = im[y:y+h, x:x+w]
-        outputs = predictor(seg)
+        solid_outputs = solid_predictor(seg)
+        liquid_outputs = liquid_predictor(seg)
         i = 0
-        for boxp in outputs["instances"].pred_boxes.to('cpu'):
+        for boxp in solid_outputs["instances"].pred_boxes.to('cpu'):
             boxp = boxp + torch.Tensor([x, y, x, y]).to('cpu')
-            v_cropped.draw_box(boxp, edge_color=colors[outputs["instances"].pred_classes[i]])
-            v_cropped.draw_text(str(classes[outputs["instances"].pred_classes[i]]), tuple(boxp[:2].numpy()),
-                                  color=colors[outputs["instances"].pred_classes[i]])
+            v_cropped.draw_box(boxp, edge_color=solid_colors[solid_outputs["instances"].pred_classes[i]])
+            v_cropped.draw_text(str(solid_classes[solid_outputs["instances"].pred_classes[i]]), tuple(boxp[:2].numpy()),
+                                  color=solid_colors[solid_outputs["instances"].pred_classes[i]])
+            i += 1
+        i = 0
+        for boxp in liquid_outputs["instances"].pred_boxes.to('cpu'):
+            boxp = boxp + torch.Tensor([x, y, x, y]).to('cpu')
+            v_cropped.draw_box(boxp, edge_color=liquid_colors[liquid_outputs["instances"].pred_classes[i]])
+            v_cropped.draw_text(str(liquid_classes[liquid_outputs["instances"].pred_classes[i]]), tuple(boxp[:2].numpy()),
+                                color=liquid_colors[liquid_outputs["instances"].pred_classes[i]])
             i += 1
 
     i = 0
-    for box in uncropped_outputs["instances"].pred_boxes.to('cpu'):
-        v_uncropped.draw_box(box, edge_color=colors[uncropped_outputs["instances"].pred_classes[i]])
-        v_uncropped.draw_text(str(classes[uncropped_outputs["instances"].pred_classes[i]]), tuple(box[:2].numpy()),
-                    color=colors[uncropped_outputs["instances"].pred_classes[i]])
+    for box in solid_uncropped_outputs["instances"].pred_boxes.to('cpu'):
+        v_uncropped.draw_box(box, edge_color=solid_colors[solid_uncropped_outputs["instances"].pred_classes[i]])
+        v_uncropped.draw_text(str(solid_classes[solid_uncropped_outputs["instances"].pred_classes[i]]), tuple(box[:2].numpy()),
+                    color=solid_colors[solid_uncropped_outputs["instances"].pred_classes[i]])
+        i += 1
+    i = 0
+    for box in liquid_uncropped_outputs["instances"].pred_boxes.to('cpu'):
+        v_uncropped.draw_box(box, edge_color=liquid_colors[liquid_uncropped_outputs["instances"].pred_classes[i]])
+        v_uncropped.draw_text(str(liquid_classes[liquid_uncropped_outputs["instances"].pred_classes[i]]),
+                              tuple(box[:2].numpy()),
+                              color=liquid_colors[liquid_uncropped_outputs["instances"].pred_classes[i]])
         i += 1
     return v_uncropped.get_output().get_image(), v_cropped.get_output().get_image()
 
@@ -188,7 +219,7 @@ def segment_video():
             vial_bbox.append(ret["bbox"][i])
     LOG.info(f'segment complete, masks found: {len(vial_bbox)}')
     LOG.info(f'Initializing HeinSight2.0')
-    predictor = initialize_rcnn()
+    liquid_predictor, solid_predictor = initialize_rcnn()
 
     writer1 = imageio.get_writer(f"./output/insseg/uncrop_{input_image_name.split('.')[0]}.mp4", fps=60)
     writer2 = imageio.get_writer(f"./output/insseg/crop_{input_image_name.split('.')[0]}.mp4", fps=60)
@@ -200,7 +231,7 @@ def segment_video():
             frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             scale = 2560.0/1280.0
             resized_frame = cv2.resize(frame, (2560, 1440))
-            uncrop_im, crop_im = eval(resized_frame, vial_bbox, predictor, scale=scale)
+            uncrop_im, crop_im = eval(resized_frame, vial_bbox, liquid_predictor, solid_predictor, scale=scale)
             writer1.append_data(uncrop_im)
             writer2.append_data(crop_im)
         else:
