@@ -145,6 +145,9 @@ def eval(im, boxes, liquid_predictor, solid_predictor, scale=1.0):
     for box in boxes:
         x, y, w, h, = box
         x, y, w, h = int(x*scale), int(y*scale), int(w*scale), int(h*scale)
+        cap_ratio = 0.2
+        x, y = x, int(y + h*cap_ratio)
+        h, w = int((1-cap_ratio)*h), w
         seg = im[y:y+h, x:x+w]
         solid_outputs = solid_predictor(seg)
         liquid_outputs = liquid_predictor(seg)
