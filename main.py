@@ -14,6 +14,7 @@ import argparse
 from PIL import Image
 import imageio
 import cv2
+import tqdm
 import torch
 from local_utils.log_util import init_logger
 from local_utils.config_utils import parse_config_utils
@@ -30,9 +31,9 @@ colors = [(189/255.0, 16/255.0, 224/255.0), (245/255.0, 166/255.0, 35/255.0), (1
 
 
 solid_classes = ["Residue", "Solid", "StirBar"]
-solid_colors = [(189/255.0, 16/255.0, 224/255.0), (245/255.0, 166/255.0, 35/255.0), (110/255.0, 226/255.0, 105/255.0)]
+solid_colors = [(248/255.0, 231/255.0, 28/255.0), (0/255.0, 60/255.0, 255/255.0), (110/255.0, 226/255.0, 105/255.0)]
 liquid_classes = ["Homogeneous Reaction", "Heterogeneous Reaction", "Empty"]
-liquid_colors = [(248/255.0, 231/255.0, 28/255.0), (0/255.0, 60/255.0, 255/255.0), (60/255.0, 60/255.0, 60/255.0)]
+liquid_colors = [(189/255.0, 16/255.0, 224/255.0), (245/255.0, 166/255.0, 35/255.0), (120/255.0, 120/255.0, 120/255.0), (60/255.0, 60/255.0, 60/255.0)]
 
 
 LOG = init_logger.get_logger('instance_seg.log')
@@ -112,18 +113,18 @@ def initialize_rcnn():
     cfg.MODEL.ROI_HEADS.NMS_THRESH_TEST = 0.1
     cfg.MODEL.WEIGHTS = "liquid/model_final.pth"  # path to the model we just trained
     cfg.MODEL.ROI_HEADS.SCORE_THRESH_TEST = 0.7  # set a custom testing threshold
-    cfg.TEST.DETECTIONS_PER_IMAGE = 4
+    cfg.TEST.DETECTIONS_PER_IMAGE = 2
     cfg.MODEL.DEVICE = "cuda"
     liquid_predictor = DefaultPredictor(cfg)
-    cfg = get_cfg()
-    cfg.merge_from_file(model_zoo.get_config_file("COCO-InstanceSegmentation/mask_rcnn_R_101_FPN_3x.yaml"))
-    cfg.MODEL.ROI_HEADS.NUM_CLASSES = 3
-    cfg.MODEL.ROI_HEADS.NMS_THRESH_TEST = 0.1
-    cfg.MODEL.WEIGHTS = "solid/model_final.pth"  # path to the model we just trained
-    cfg.MODEL.ROI_HEADS.SCORE_THRESH_TEST = 0.7  # set a custom testing threshold
-    cfg.TEST.DETECTIONS_PER_IMAGE = 10
-    cfg.MODEL.DEVICE = "cuda"
-    solid_predictor = DefaultPredictor(cfg)
+    cfg2 = get_cfg()
+    cfg2.merge_from_file(model_zoo.get_config_file("COCO-InstanceSegmentation/mask_rcnn_R_101_FPN_3x.yaml"))
+    cfg2.MODEL.ROI_HEADS.NUM_CLASSES = 3
+    cfg2.MODEL.ROI_HEADS.NMS_THRESH_TEST = 0.1
+    cfg2.MODEL.WEIGHTS = "solid/model_final.pth"  # path to the model we just trained
+    cfg2.MODEL.ROI_HEADS.SCORE_THRESH_TEST = 0.7  # set a custom testing threshold
+    cfg2.TEST.DETECTIONS_PER_IMAGE = 10
+    cfg2.MODEL.DEVICE = "cuda"
+    solid_predictor = DefaultPredictor(cfg2)
     return liquid_predictor, solid_predictor
 
 
@@ -132,53 +133,59 @@ def eval(im, boxes, liquid_predictor, solid_predictor, scale=1.0):
     liquid_uncropped_outputs = liquid_predictor(im)
     v_cropped = Visualizer(im,
                              metadata=LLDatasetMetadate,
-                             scale=.5,
+                             scale=1.0,
                              instance_mode=ColorMode.SEGMENTATION
                              # remove the colors of unsegmented pixels. This option is only available for segmentation models
                              )
     v_uncropped = Visualizer(im,
                              metadata=LLDatasetMetadate,
-                             scale=.5,
+                             scale=1.0,
                              instance_mode=ColorMode.SEGMENTATION
                              # remove the colors of unsegmented pixels. This option is only available for segmentation models
                              )
     for box in boxes:
         x, y, w, h, = box
         x, y, w, h = int(x*scale), int(y*scale), int(w*scale), int(h*scale)
-        cap_ratio = 0.2
+        cap_ratio = 0.0
         x, y = x, int(y + h*cap_ratio)
         h, w = int((1-cap_ratio)*h), w
         seg = im[y:y+h, x:x+w]
+        # seg = cv2.resize(seg, (768, 384))
         solid_outputs = solid_predictor(seg)
+        seg = im[y:y+h, x:x+w]
+        # seg = cv2.resize(seg, (768, 384))
         liquid_outputs = liquid_predictor(seg)
         i = 0
+        # if i==0:
+        #     cv2.imwrite('./tmp.jpg', seg)
+        #     return
         for boxp in solid_outputs["instances"].pred_boxes.to('cpu'):
             boxp = boxp + torch.Tensor([x, y, x, y]).to('cpu')
             v_cropped.draw_box(boxp, edge_color=solid_colors[solid_outputs["instances"].pred_classes[i]])
-            v_cropped.draw_text(str(solid_classes[solid_outputs["instances"].pred_classes[i]]), tuple(boxp[:2].numpy()),
+            v_cropped.draw_text(f'{solid_classes[solid_outputs["instances"].pred_classes[i]]}, {solid_outputs["instances"].scores[i]}', tuple(boxp[:2].numpy()),
                                   color=solid_colors[solid_outputs["instances"].pred_classes[i]])
             i += 1
         i = 0
         for boxp in liquid_outputs["instances"].pred_boxes.to('cpu'):
             boxp = boxp + torch.Tensor([x, y, x, y]).to('cpu')
             v_cropped.draw_box(boxp, edge_color=liquid_colors[liquid_outputs["instances"].pred_classes[i]])
-            v_cropped.draw_text(str(liquid_classes[liquid_outputs["instances"].pred_classes[i]]), tuple(boxp[:2].numpy()),
+            v_cropped.draw_text(f'{liquid_classes[liquid_outputs["instances"].pred_classes[i]]}, {liquid_outputs["instances"].scores[i]}', tuple(boxp[:2].numpy()),
                                 color=liquid_colors[liquid_outputs["instances"].pred_classes[i]])
             i += 1
 
-    i = 0
-    for box in solid_uncropped_outputs["instances"].pred_boxes.to('cpu'):
-        v_uncropped.draw_box(box, edge_color=solid_colors[solid_uncropped_outputs["instances"].pred_classes[i]])
-        v_uncropped.draw_text(str(solid_classes[solid_uncropped_outputs["instances"].pred_classes[i]]), tuple(box[:2].numpy()),
-                    color=solid_colors[solid_uncropped_outputs["instances"].pred_classes[i]])
-        i += 1
-    i = 0
-    for box in liquid_uncropped_outputs["instances"].pred_boxes.to('cpu'):
-        v_uncropped.draw_box(box, edge_color=liquid_colors[liquid_uncropped_outputs["instances"].pred_classes[i]])
-        v_uncropped.draw_text(str(liquid_classes[liquid_uncropped_outputs["instances"].pred_classes[i]]),
-                              tuple(box[:2].numpy()),
-                              color=liquid_colors[liquid_uncropped_outputs["instances"].pred_classes[i]])
-        i += 1
+    # i = 0
+    # for box in solid_uncropped_outputs["instances"].pred_boxes.to('cpu'):
+    #     v_uncropped.draw_box(box, edge_color=solid_colors[solid_uncropped_outputs["instances"].pred_classes[i]])
+    #     v_uncropped.draw_text(str(solid_classes[solid_uncropped_outputs["instances"].pred_classes[i]]), tuple(box[:2].numpy()),
+    #                 color=solid_colors[solid_uncropped_outputs["instances"].pred_classes[i]])
+    #     i += 1
+    # i = 0
+    # for box in liquid_uncropped_outputs["instances"].pred_boxes.to('cpu'):
+    #     v_uncropped.draw_box(box, edge_color=liquid_colors[liquid_uncropped_outputs["instances"].pred_classes[i]])
+    #     v_uncropped.draw_text(str(liquid_classes[liquid_uncropped_outputs["instances"].pred_classes[i]]),
+    #                           tuple(box[:2].numpy()),
+    #                           color=liquid_colors[liquid_uncropped_outputs["instances"].pred_classes[i]])
+    #     i += 1
     return v_uncropped.get_output().get_image(), v_cropped.get_output().get_image()
 
 
@@ -223,25 +230,28 @@ def segment_video():
     LOG.info(f'segment complete, masks found: {len(vial_bbox)}')
     LOG.info(f'Initializing HeinSight2.0')
     liquid_predictor, solid_predictor = initialize_rcnn()
-
+    vial_bbox = [[425, 45, 248, 680], [745, 29, 229, 700], [1080, 37, 238, 687], [1427, 36, 257, 681]]
     writer1 = imageio.get_writer(f"./output/insseg/uncrop_{input_image_name.split('.')[0]}.mp4", fps=60)
     writer2 = imageio.get_writer(f"./output/insseg/crop_{input_image_name.split('.')[0]}.mp4", fps=60)
     cap = cv2.VideoCapture(input_image_path)
     LOG.info(f'Analysing Video')
+    pbar = tqdm.tqdm(total=6314)
     while cap.isOpened():
         ret, frame = cap.read()
         if ret:
             frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            scale = 2560.0/1280.0
-            resized_frame = cv2.resize(frame, (2560, 1440))
+            scale = 1920.0/1920.0
+            resized_frame = cv2.resize(frame, (1920, 1080))
             uncrop_im, crop_im = eval(resized_frame, vial_bbox, liquid_predictor, solid_predictor, scale=scale)
             writer1.append_data(uncrop_im)
             writer2.append_data(crop_im)
+            pbar.update(1)
         else:
             cap.release()
             break
     writer1.close()
     writer2.close()
+    pbar.close()
     LOG.info(f'Videos saved at ./output/insseg/')
     # save cluster result
     # save_dir = args.save_dir
