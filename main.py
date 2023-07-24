@@ -108,6 +108,13 @@ def main():
 
     return
 
+
+def initialize_yolo():
+    liquid_model = torch.hub.load('./yolov5', 'custom', path='./liquid/best.pt', source='local')
+    solid_model = torch.hub.load('./yolov5', 'custom', path='./solid/best.pt', source='local')
+    return liquid_model, solid_model
+
+
 def initialize_rcnn():
     cfg = get_cfg()
     # cfg.merge_from_file(model_zoo.get_config_file("COCO-InstanceSegmentation/mask_rcnn_R_101_FPN_3x.yaml"))
@@ -123,6 +130,7 @@ def initialize_rcnn():
     cfg.INPUT.MIN_SIZE_TRAIN = 384
     cfg.INPUT.MAX_SIZE_TEST = 768
     cfg.INPUT.MIN_SIZE_TEST = 384
+    cfg.MODEL.RPN.POST_NMS_TOPK_TEST = 100
     liquid_predictor = AttentionPredictor(cfg)
     # liquid_predictor = DefaultPredictor(cfg)
     cfg2 = get_cfg()
@@ -135,6 +143,29 @@ def initialize_rcnn():
     cfg2.MODEL.DEVICE = "cuda"
     solid_predictor = DefaultPredictor(cfg2)
     return liquid_predictor, solid_predictor
+
+
+def eval_yolo(im, boxes, liquid_predictor, scale=1.0):
+    v_cropped = Visualizer(im,
+                           metadata=LLDatasetMetadate,
+                           scale=1.0,
+                           instance_mode=ColorMode.SEGMENTATION
+                           # remove the colors of unsegmented pixels. This option is only available for segmentation models
+                           )
+    for box in boxes:
+        x, y, w, h, = box
+        x, y, w, h = int(x*scale), int(y*scale), int(w*scale), int(h*scale)
+        seg = im[y:y+h, x:x+w]
+        results = liquid_predictor(seg, size=640)
+        for boxp in results.xyxyn[0].to('cpu'):
+            classp = int(boxp[5].item())
+            scorep = boxp[4].item()
+            boxp = boxp[:4]*torch.Tensor([w, h, w, h]).to('cpu') + torch.Tensor([x, y, x, y]).to('cpu')
+            v_cropped.draw_box(boxp, edge_color=liquid_colors[classp])
+            v_cropped.draw_text(f'{liquid_classes[classp]}, {scorep:.2f}', tuple(boxp[:2].numpy()),
+                                                        color=liquid_colors[classp])
+    return v_uncropped.get_output().get_image(), v_cropped.get_output().get_image()
+
 
 
 def eval(im, boxes, liquid_predictor, solid_predictor, scale=1.0, context=[], rolling_buffer=None):
@@ -251,16 +282,17 @@ def segment_video():
             vial_bbox.append(ret["bbox"][i])
     LOG.info(f'segment complete, masks found: {len(vial_bbox)} {vial_bbox}')
     LOG.info(f'Initializing HeinSight2.0')
-    liquid_predictor, solid_predictor = initialize_rcnn()
+    liquid_predictor, solid_predictor = initialize_yolo()
     rolling_buffer = RollingAverageSmoothing(smoothness=0.7, period=60, num_predictions=4)
     # vial_bbox = [[425, 45, 248, 680], [745, 29, 229, 700], [1080, 37, 238, 687], [1427, 36, 257, 681]]
     # vial_bbox = [[65, 195, 296, 610], [437, 180, 291, 600], [871, 166, 253, 582], [1180, 160, 255, 578], [1523, 159, 291, 565]]
-    # vial_bbox = [[648, 30, 262, 713], [1005, 43, 265, 694], [1325, 35, 270, 705]]
+    vial_bbox = [[648, 30, 262, 713], [1005, 43, 265, 694], [1325, 35, 270, 705]]
     # vial_bbox = [[303, 32, 303, 719], [702, 33, 273, 719], [984, 37, 268, 709], [1325, 37, 288, 707]]
     # vial_bbox = [[447, 3, 156, 467], [764, 3, 157, 461]]
     # vial_bbox = [[598, 128, 109, 312]]
     # vial_bbox = [[597, 106, 118, 298]]
     # vial_bbox = [vial_bbox[-1]]
+    # vial_bbox = [[616, 0, 107, 319]]
     writer1 = imageio.get_writer(f"./output/insseg/uncrop_{input_image_name.split('.')[0]}.mp4", fps=60)
     writer2 = imageio.get_writer(f"./output/insseg/crop_{input_image_name.split('.')[0]}.mp4", fps=60)
     cap = cv2.VideoCapture(input_image_path)
@@ -268,7 +300,7 @@ def segment_video():
     pbar = tqdm.tqdm(total=3800)
     fps = cap.get(cv2.CAP_PROP_FPS)
     print(f"FPS: {fps}")
-    num_context = 60
+    num_context = 0
     frame_rate = int(round(fps))//6
     frame_drain = frame_rate
     max_buff = (num_context)*frame_rate
@@ -279,7 +311,7 @@ def segment_video():
         ret, frame = cap.read()
         if ret:
             # frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            scale = 1920.0/1280.0
+            scale = 1920.0/1920.0
             resized_frame = cv2.resize(frame, (1920, 1080))
             if len(buff)<max_buff:
                 buff.append(resized_frame.copy())
@@ -290,7 +322,8 @@ def segment_video():
                 pbar.update(1)
                 continue
             # frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            context = buff[:-frame_rate+1:frame_rate]
+            # context = buff[:-frame_rate+1:frame_rate]
+            context = []
             if len(buff)<max_buff:
                 assert len(context)<num_context and len(context)!=0
             else:
@@ -298,12 +331,11 @@ def segment_video():
             if len(context)==num_context and not printed:
                 LOG.info(f"Max context reached {len(context), len(buff)}")
                 printed = True
-            scale = 1920.0/1280.0
-            resized_frame = cv2.resize(frame, (1920, 1080))
-            uncrop_im, crop_im = eval(resized_frame, vial_bbox, liquid_predictor, solid_predictor, scale=scale, context=context)
+            # uncrop_im, crop_im = eval(resized_frame, vial_bbox, liquid_predictor, solid_predictor, scale=scale, context=context)
+            uncrop_im, crop_im = eval_yolo(resized_frame, vial_bbox, liquid_predictor, scale=scale)
             writer1.append_data(cv2.cvtColor(uncrop_im, cv2.COLOR_BGR2RGB))
             writer2.append_data(cv2.cvtColor(crop_im, cv2.COLOR_BGR2RGB))
-            if len(buff)>=max_buff:
+            if len(buff)>max_buff:
                 buff.pop(0)
             pbar.update(1)
         else:
