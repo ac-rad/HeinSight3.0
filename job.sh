@@ -11,5 +11,5 @@ cd /home/abhijoymandal/abhijoy_working_dir/Segment-Anything-U-Specify/
 module load python pytorch
 module load libglvnd
 source ./venv/bin/activate
-python3 ./yolo_main.py --input_image_path ./data/test_images/2023-07-10_RE-HTE-UoT-011_milk_oil.mkv
+python3 ./yolo_main.py --input_image_path ./data/test_images/2023-07-10_RE-HTE-UoT-011_milk_oil.mkv --batch_size 32
 
