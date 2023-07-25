@@ -11,5 +11,5 @@ cd /home/abhijoymandal/abhijoy_working_dir/Segment-Anything-U-Specify/
 module load python pytorch
 module load libglvnd
 source ./venv/bin/activate
-python3 ./yolo_main.py --input_image_path ./data/test_images/dimmed_resized_2023-06-29_RE-HTE-UoT_test_004.mp4 --batch_size 32
+python3 ./yolo_main.py --input_image_path ./data/test_images/20230719_EL_light_HTEo.mp4 --batch_size 128
 
