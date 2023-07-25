@@ -197,7 +197,7 @@ def segment_video():
         ret, frame = cap.read()
         if ret:
             # frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            scale = 1920.0/1280.0
+            scale = 1920.0/1920.0
             frame_count += 1
             resized_frame = cv2.resize(frame, (1920, 1080))
             resized_frame = cv2.cvtColor(resized_frame, cv2.COLOR_BGR2RGB)
