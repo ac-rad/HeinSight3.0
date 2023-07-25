@@ -158,7 +158,10 @@ def segment_video():
         frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         results = vial_detector(frame)
         results.save(save_dir='./output/insseg', exist_ok=True)
-        vial_bbox = (results.xywhn[0][:, :4].to('cpu')*torch.tensor([1920.0, 1080.0, 1920.0, 1080.0]).to('cpu')).tolist()
+        vial_bbox = results.xyxyn[0][:, :4].to('cpu')*torch.tensor([1920.0, 1080.0, 1920.0, 1080.0]).to('cpu')
+        vial_bbox[:, 2] = vial_bbox[:, 2] - vial_bbox[:, 0]
+        vial_bbox[:, 3] = vial_bbox[:, 3] - vial_bbox[:, 1]
+        vial_bbox = vial_bbox.to(torch.int32).tolist()
         # cv2.imwrite(f"./data/test_images/{input_image_name.split('.')[0]}_one_frame_tmp.jpg", results.plot())
         cap.release()
     assert vial_bbox!=[]
