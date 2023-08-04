@@ -149,7 +149,7 @@ def segment_video():
         LOG.error('input video path: {:s} not exists'.format(input_image_path))
         return
     LOG.info(f"Initializing vessel detector")
-    VESSEL_THRESH = 0.8
+    VESSEL_THRESH = 0.6
     vial_detector = initialize_vial_detector()
     liquid_predictor, solid_predictor = initialize_yolo()
     cap = cv2.VideoCapture(input_image_path)
@@ -159,9 +159,13 @@ def segment_video():
         frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         results = vial_detector(frame)
         results.save(save_dir='./output/insseg', exist_ok=True)
+        # LOG.info(results.xyxyn[0][:, 4])
         mask = results.xyxyn[0][:, 4]>=VESSEL_THRESH
+        # LOG.info(mask)
         indices = torch.nonzero(mask)
-        results.xyxyn[0] = results.xyxyn[0][indices][0]
+        # LOG.info(indices)
+        results.xyxyn[0] = torch.squeeze(results.xyxyn[0][indices], dim=1)
+        # LOG.info(results.xyxyn[0][:, :4].shape)
         vial_bbox = results.xyxyn[0][:, :4].to('cpu')*torch.tensor([1920.0, 1080.0, 1920.0, 1080.0]).to('cpu')
         vial_bbox[:, 2] = vial_bbox[:, 2] - vial_bbox[:, 0]
         vial_bbox[:, 3] = vial_bbox[:, 3] - vial_bbox[:, 1]
@@ -197,7 +201,7 @@ def segment_video():
     buff = []
     printed = False
     batch = []
-    batch_size=args.batch_size
+    batch_size=args.batch_size//(len(vial_bbox))
     LOG.info(f"Batch size: {batch_size}")
     frame_count = 0
     while cap.isOpened():
