@@ -63,7 +63,7 @@ def initialize_vial_detector():
     return model
 
 def initialize_yolo():
-    liquid_model = torch.hub.load('./yolov5', 'custom', path='./liquid/best.pt', source='local')
+    liquid_model = torch.hub.load('./yolov5', 'custom', path='./exp41/weights/best.pt', source='local')
     solid_model = torch.hub.load('./yolov5', 'custom', path='./solid/best.pt', source='local')
     return liquid_model, solid_model
 
@@ -101,13 +101,16 @@ def eval_yolo_batch(ims, boxes, liquid_predictor, scale=1.0):
             x, y, w, h = int(x*scale), int(y*scale), int(w*scale), int(h*scale)
             seg = im[y:y+h, x:x+w]
             batch.append(seg.copy())
+    pad = 128 - len(batch)
+    for _ in range(pad):
+        batch.append(batch[-1].copy())
     # print(len(batch))
     # end = time.time()
     # LOG.info(f"Time to initialize batch {end-start}")
-    # start = time.time()
+    start = time.time()
     results = liquid_predictor(batch, size=640)
-    # end = time.time()
-    # LOG.info(f"Inference time {end-start}")
+    end = time.time()
+    LOG.info(f"Inference time for {len(batch)}: {end-start}")
     for im_idx, im in enumerate(ims):
         # start = time.time()
         # v_cropped = Visualizer(im,

@@ -1,7 +1,6 @@
 #!/bin/bash
 #SBATCH --time=00:180:00
-#SBATCH --gres=gpu:1
-#SBATCH --cpus-per-task=32
+#SBATCH --cpus-per-task=64
 #SBATCH --ntasks=1
 #SBATCH --mem=32000M
 #SBATCH --job-name=objectDetection
