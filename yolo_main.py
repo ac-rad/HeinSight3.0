@@ -32,7 +32,7 @@ colors = [(189/255.0, 16/255.0, 224/255.0), (245/255.0, 166/255.0, 35/255.0), (1
 
 solid_classes = ["Residue", "Solid", "StirBar"]
 solid_colors = [(248/255.0, 231/255.0, 28/255.0), (0/255.0, 60/255.0, 255/255.0), (110/255.0, 226/255.0, 105/255.0)]
-liquid_classes = ["Homogeneous Reaction", "Heterogeneous Reaction", "Empty", "Cap"]
+liquid_classes = ["Homo", "Hetero", "Empty", "Cap"]
 liquid_colors = [(189, 16, 224), (245, 166, 35), (120, 120, 120), (60, 60, 60)]
 
 
@@ -63,7 +63,7 @@ def initialize_vial_detector():
     return model
 
 def initialize_yolo():
-    liquid_model = torch.hub.load('./yolov5', 'custom', path='./exp41/weights/best.pt', source='local')
+    liquid_model = torch.hub.load('./yolov5', 'custom', path='./liquid/best.pt', source='local')
     solid_model = torch.hub.load('./yolov5', 'custom', path='./solid/best.pt', source='local')
     return liquid_model, solid_model
 
@@ -83,6 +83,8 @@ def eval_yolo(im, boxes, liquid_predictor, scale=1.0):
         for boxp in results.xyxyn[0].to('cpu'):
             classp = int(boxp[5].item())
             scorep = boxp[4].item()
+            if scorep < 0.5:
+                continue
             boxp = boxp[:4]*torch.Tensor([w, h, w, h]).to('cpu') + torch.Tensor([x, y, x, y]).to('cpu')
             v_cropped.draw_box(boxp, edge_color=liquid_colors[classp])
             v_cropped.draw_text(f'{liquid_classes[classp]}, {scorep:.2f}', tuple(boxp[:2].numpy()),
@@ -90,7 +92,7 @@ def eval_yolo(im, boxes, liquid_predictor, scale=1.0):
     return v_cropped.get_output().get_image(), v_cropped.get_output().get_image()
 
 
-def eval_yolo_batch(ims, boxes, liquid_predictor, scale=1.0):
+def eval_yolo_batch(ims, boxes, liquid_predictor, scale=1.0, batch_size=32):
     batch = []
     ret_cropped = []
     ret_uncropped = []
@@ -101,7 +103,7 @@ def eval_yolo_batch(ims, boxes, liquid_predictor, scale=1.0):
             x, y, w, h = int(x*scale), int(y*scale), int(w*scale), int(h*scale)
             seg = im[y:y+h, x:x+w]
             batch.append(seg.copy())
-    pad = 128 - len(batch)
+    pad = batch_size - len(batch)
     for _ in range(pad):
         batch.append(batch[-1].copy())
     # print(len(batch))
@@ -110,7 +112,7 @@ def eval_yolo_batch(ims, boxes, liquid_predictor, scale=1.0):
     start = time.time()
     results = liquid_predictor(batch, size=640)
     end = time.time()
-    LOG.info(f"Inference time for {len(batch)}: {end-start}")
+    # LOG.info(f"Inference time for {len(batch)}: {end-start}")
     for im_idx, im in enumerate(ims):
         # start = time.time()
         # v_cropped = Visualizer(im,
@@ -129,6 +131,8 @@ def eval_yolo_batch(ims, boxes, liquid_predictor, scale=1.0):
             for boxp in results.xyxyn[im_idx*len(boxes)+box_idx].to('cpu'):
                 classp = int(boxp[5].item())
                 scorep = boxp[4].item()
+                if scorep < 0.5:
+                    continue
                 boxp = boxp[:4]*torch.Tensor([w, h, w, h]).to('cpu') + torch.Tensor([x, y, x, y]).to('cpu')
                 im = cv2.rectangle(im, tuple(boxp[:2].numpy().astype(int)), tuple(boxp[2:].numpy().astype(int)), liquid_colors[classp], 1)
                 im = cv2.putText(im, f'{liquid_classes[classp]}, {scorep:.2f}', tuple(boxp[:2].numpy().astype(int)), cv2.FONT_HERSHEY_SIMPLEX, 1, liquid_colors[classp], 1)
@@ -239,7 +243,7 @@ def segment_video():
                 printed = True
             # uncrop_im, crop_im = eval(resized_frame, vial_bbox, liquid_predictor, solid_predictor, scale=scale, context=context)
 
-            uncrop_ims, crop_ims = eval_yolo_batch(batch, vial_bbox, liquid_predictor, scale=scale)
+            uncrop_ims, crop_ims = eval_yolo_batch(batch, vial_bbox, liquid_predictor, scale=scale, batch_size=args.batch_size)
             batch = []
             for uncrop_im, crop_im in zip(uncrop_ims, crop_ims):
                 writer1.append_data(uncrop_im)
