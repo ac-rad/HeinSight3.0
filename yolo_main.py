@@ -24,6 +24,11 @@ import math
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 import pandas as pd
+import matplotlib.style as mplstyle
+import matplotlib as mpl
+mpl.rcParams['path.simplify'] = True
+mpl.rcParams['path.simplify_threshold'] = 1.0
+mplstyle.use('fast')
 # from detectron2 import model_zoo
 # from detectron2.engine import DefaultPredictor
 # from detectron2.config import get_cfg
@@ -167,7 +172,7 @@ def eval_yolo_batch(ims, boxes, liquid_predictor, scale=1.0, batch_size=32):
                     lowest_h = list_box[1]
                 m_y = (list_box[1]+list_box[3])/2.0
                 # if liquid_classes[classp] != "Empty":
-                bx_volumes.append((list_box[3]-list_box[1], m_y))
+                bx_volumes.append((list_box[3]-list_box[1], m_y, list_box[1]))
                 boxp = boxp[:4]*torch.Tensor([w, h, w, h]).to('cpu') + torch.Tensor([x, y, x, y]).to('cpu')
                 boxp = boxp.to('cpu')
                 list_boxp = boxp.tolist()
@@ -182,7 +187,7 @@ def eval_yolo_batch(ims, boxes, liquid_predictor, scale=1.0, batch_size=32):
             bx_colors = sorted(bx_colors, key=lambda x: x[1])
             for idx, vol in enumerate(bx_volumes):
                 volumes[im_idx, box_idx, idx]+= vol[0]*5.0/(1-lowest_h)
-                segs[im_idx, box_idx, idx]+=vol[0]
+                segs[im_idx, box_idx, idx]+=(1-vol[2])
             for idx, col in enumerate(bx_colors):
                 colors[im_idx, box_idx, idx] += col[0]
         # end = time.time()
@@ -269,6 +274,8 @@ def create_plots(turbs, vols, segs):
             # lines[i].set_ydata(y)
             # if fr==0:
             axs[row, col].set_title(f'Vial {i+1}')
+            axs[row, col].set_xlim(0.0, 1.0)
+            axs[row, col].set_ylim(0.0, 1.0)
             for line in lines:
                 xdata, ydata = line.get_xdata(), line.get_ydata()
                 line.set_xdata(ydata)
@@ -278,8 +285,8 @@ def create_plots(turbs, vols, segs):
             for j in range(10):
                 if segs[fr, i, j]!=0:
                     axs[row, col].axhline(y=segs[fr, i, j], color='red', linestyle='--')
-            axs[row, col].set_xlim(0.0, 1.0)
-            axs[row, col].set_ylim(0.0, 1.0)
+            # axs[row, col].set_xlim(0.0, 1.0)
+            # axs[row, col].set_ylim(0.0, 1.0)
         # fig.canvas.draw()
         # fig.canvas.flush_events()
         canvas = FigureCanvas(fig)
