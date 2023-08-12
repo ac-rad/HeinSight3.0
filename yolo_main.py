@@ -225,6 +225,28 @@ def create_plots(turbs, vols, segs):
             cols = i
             break
     rows = num_vials//cols
+
+    
+    fig, axs = plt.subplots(cols, rows, figsize=(12, 8))
+    fig.suptitle('Volume grid')
+    x = np.linspace(0, num_frames//30+1, num_frames//30+1)
+    for i in tqdm.tqdm(range(num_vials)):
+        # fig, axs = plt.subplots(rows, cols, figsize=(12, 8))
+        # fig.suptitle('Volume grid')
+        # x = np.linspace(0, num_frames//30, num_frames)
+        v_vols = vols[:, i, :]
+        for j in range(10):
+            ax = v_vols[:, j]
+            any_data = np.any(ax!=0)
+            if any_data:
+                row = i // cols
+                col = i % cols
+                axs[col, row].plot(x, ax[::30])
+                axs[col, row].set_title(f'Vial {i+1}')
+    plt.savefig('./output/insseg/volumes.jpg')
+    plt.close()
+
+    
     turbidity_vid_writer = imageio.get_writer(f"./output/insseg/turbidities.mp4", fps=30)
     fig, axs = plt.subplots(rows, cols, figsize=(8, 12))
     fig.suptitle('Turbidity grid')
@@ -283,24 +305,6 @@ def create_plots(turbs, vols, segs):
         # plt.close()
     plt.close()
     turbidity_vid_writer.close()
-    fig, axs = plt.subplots(cols, rows, figsize=(12, 8))
-    fig.suptitle('Volume grid')
-    x = np.linspace(0, num_frames//30+1, num_frames//30+1)
-    for i in tqdm.tqdm(range(num_vials)):
-        # fig, axs = plt.subplots(rows, cols, figsize=(12, 8))
-        # fig.suptitle('Volume grid')
-        # x = np.linspace(0, num_frames//30, num_frames)
-        v_vols = vols[:, i, :]
-        for j in range(10):
-            ax = v_vols[:, j]
-            any_data = np.any(ax!=0)
-            if any_data:
-                row = i // cols
-                col = i % cols
-                axs[col, row].plot(x, ax[::30])
-                axs[col, row].set_title(f'Vial {i+1}')
-        plt.savefig('./output/insseg/volumes.jpg')
-    plt.close()
 
 
 def save_data(turbs, cols, vols):
