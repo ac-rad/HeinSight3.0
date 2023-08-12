@@ -107,7 +107,7 @@ def initialize_yolo():
 def eval_yolo_batch(ims, boxes, liquid_predictor, scale=1.0, batch_size=32):
     volumes = np.zeros((len(ims), len(boxes), 10))
     segs = np.zeros((len(ims), len(boxes), 10))
-    turbidity = np.zeros((len(ims), len(boxes), 200))
+    turbidity = np.zeros((len(ims), len(boxes), 500))
     colors = np.zeros((len(ims), len(boxes), 10, 3))
     batch = []
     turbidities = []
@@ -119,7 +119,7 @@ def eval_yolo_batch(ims, boxes, liquid_predictor, scale=1.0, batch_size=32):
             x, y, w, h, = box
             x, y, w, h = int(x*scale), int(y*scale), int(w*scale), int(h*scale)
             seg = im[y:y+h, x:x+w]
-            turb = cv2.resize(seg.copy(), (100, 200))
+            turb = cv2.resize(seg.copy(), (100, 500))
             hsv = cv2.cvtColor(turb, cv2.COLOR_BGR2HSV)
             v = np.mean(hsv[:, :, -1], axis=-1)
             # LOG.info(v.size)
@@ -234,7 +234,10 @@ def create_plots(turbs, vols, segs):
     
     fig, axs = plt.subplots(cols, rows, figsize=(12, 8))
     fig.suptitle('Volume grid')
-    x = np.linspace(0, num_frames//30+1, num_frames//30+1)
+    if num_frames%30==0:
+        x = np.linspace(0, num_frames//30, num_frames//30)
+    else:
+        x = np.linspace(0, num_frames//30+1, num_frames//30+1)
     for i in tqdm.tqdm(range(num_vials)):
         # fig, axs = plt.subplots(rows, cols, figsize=(12, 8))
         # fig.suptitle('Volume grid')
@@ -255,7 +258,7 @@ def create_plots(turbs, vols, segs):
     turbidity_vid_writer = imageio.get_writer(f"./output/insseg/turbidities.mp4", fps=30)
     fig, axs = plt.subplots(rows, cols, figsize=(8, 12))
     fig.suptitle('Turbidity grid')
-    x = np.flip(np.linspace(0, 1, 200))
+    x = np.flip(np.linspace(0, 1, 500))
     # lines= []
     # for i in range(num_vials):
     #     row = i // cols
@@ -364,7 +367,7 @@ def segment_video():
     # vial_bbox = [[597, 106, 118, 298]]
     # vial_bbox = [vial_bbox[-1]]
     # vial_bbox = [[616, 0, 107, 319]]
-    create_plots(np.random.normal(size=(100, 6, 200)), np.random.normal(size=(100, 6, 10)), np.random.normal(size=(100, 6, 10)))
+    create_plots(np.random.normal(size=(120, 6, 500)), np.random.normal(size=(120, 6, 10)), np.random.normal(size=(120, 6, 10)))
     # save_data(np.random.normal(size=(100, 6, 200)), np.random.normal(size=(100, 6, 10, 3)), np.random.normal(size=(100, 6, 10)))
     writer1 = imageio.get_writer(f"./output/insseg/uncrop_{input_image_name.split('.')[0]}.mp4", fps=60)
     writer2 = imageio.get_writer(f"./output/insseg/crop_{input_image_name.split('.')[0]}.mp4", fps=60)
