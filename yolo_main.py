@@ -62,6 +62,7 @@ def init_args():
     parser.add_argument('--input_image_path', type=str, default='./data/test_bear.jpg', required=True)
     parser.add_argument('--insseg_cfg_path', type=str, default='./config/insseg.yaml')
     parser.add_argument('--batch_size', type=int, default=64)
+    parser.add_argument('--nms_iou', type=float, default=0.2)
     parser.add_argument('--create_plots', action='store_true')
     parser.add_argument('--save_dir', type=str, default='./output/insseg')
     parser.add_argument('--use_text_prefix', action='store_true')
@@ -72,10 +73,12 @@ def initialize_vial_detector():
     model = torch.hub.load('./yolov5', 'custom', path='./vial/best.pt', source='local')
     return model
 
-def initialize_yolo():
+def initialize_yolo(conf=0.5, nms_iou=0.2):
     liquid_model = torch.hub.load('./yolov5', 'custom', path='./liquid/best.pt', source='local')
     # liquid_model.to('cuda')
-    # liquid_model.amp=True
+    liquid_model.conf = conf
+    liquid_model.iou=nms_iou
+    liquid_model.agnostic=True
     solid_model = torch.hub.load('./yolov5', 'custom', path='./solid/best.pt', source='local')
     return liquid_model, solid_model
 
@@ -120,7 +123,7 @@ def eval_yolo_batch(ims, boxes, liquid_predictor, scale=1.0, batch_size=32):
             x, y, w, h = int(x*scale), int(y*scale), int(w*scale), int(h*scale)
             seg = im[y:y+h, x:x+w]
             turb = cv2.resize(seg.copy(), (100, 500))
-            hsv = cv2.cvtColor(turb, cv2.COLOR_BGR2HSV)
+            hsv = cv2.cvtColor(turb, cv2.COLOR_RGB2HSV)
             v = np.mean(hsv[:, :, -1], axis=-1)
             # LOG.info(v.size)
             turbidity[im_idx, b_idx] += v/255.0
@@ -264,7 +267,7 @@ def create_plots(turbs, vols, segs):
     #     row = i // cols
     #     col = i % cols
     #     lines.append(axs[row, col].plot(x, turbs[0, 0])[0])
-    for fr in tqdm.tqdm(range(num_frames)):
+    for fr in tqdm.tqdm(range(0, num_frames, 10)):
         # fig, axs = plt.subplots(rows, cols, figsize=(12, 8))
         # fig.suptitle('Turbidity grid')
         # x = np.linspace(0, 1, 200)
@@ -344,7 +347,7 @@ def segment_video():
     LOG.info(f"Initializing vessel detector")
     VESSEL_THRESH = 0.7
     vial_detector = initialize_vial_detector()
-    liquid_predictor, solid_predictor = initialize_yolo()
+    liquid_predictor, solid_predictor = initialize_yolo(nms_iou=args.nms_iou)
     cap = cv2.VideoCapture(input_image_path)
     vial_bbox =[]
     if cap.isOpened():
