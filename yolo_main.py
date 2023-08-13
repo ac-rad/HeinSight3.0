@@ -298,7 +298,7 @@ def segment_video():
         while True:
             ans = input("Continue? (y/n)")
             if ans=="y" or ans=="Y":
-                LOG.info("To finish camera detections gracefully, press and hold the q key to stop the analysis!")
+                LOG.info("To finish camera detections gracefully, press and hold the esc key to stop the analysis!")
                 break
     if input_image_path=="":
         caps = [cv2.VideoCapture(i) for i in cam_idx]
@@ -386,8 +386,8 @@ def segment_video():
                     writer1.append_data(uncrop_im)
                     writer2.append_data(crop_im)
             break
-        if args.use_cameras != 0 and keyboard.is_pressed('q'):
-            LOG.info("q pressed, ending gracefully")
+        if args.use_cameras != 0 and keyboard.is_pressed('esc'):
+            LOG.info("esc pressed, ending gracefully")
             _ = [cap.release() for cap in caps]
             if batch:
                 uncrop_ims, crop_ims, turbidity, color, volume, seg = eval_yolo_batch(batch, vial_bbox,
