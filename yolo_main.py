@@ -1,18 +1,8 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-# @Time    : 2023-04-11 下午2:15
-# @Author  : MaybeShewill-CV
-# @Site    :
-# @File    : sam_clip_text_seg.py
-# @IDE: PyCharm Community Edition
-"""
-instance segmentation image with sam and clip with text prompts
-"""
 import os
 os.environ["OPENCV_LOG_LEVEL"]="SILENT"
 import os.path as ops
 import argparse
-from PIL import Image
+import keyboard
 import imageio
 import cv2
 import numpy as np
@@ -30,13 +20,6 @@ import matplotlib as mpl
 mpl.rcParams['path.simplify'] = True
 mpl.rcParams['path.simplify_threshold'] = 1.0
 mplstyle.use('fast')
-# os.environ["OPENCV_LOG_LEVEL"]="SILENT"
-# from detectron2 import model_zoo
-# from detectron2.engine import DefaultPredictor
-# from detectron2.config import get_cfg
-# from detectron2.utils.visualizer import Visualizer
-# from detectron2.utils.visualizer import ColorMode
-# from detectron2.data import MetadataCatalog
 
 classes = ["Homogeneous Reaction", "Heterogeneous Reaction", "Residue", "Empty", "Solid", "StirBar"]
 colors = [(189/255.0, 16/255.0, 224/255.0), (245/255.0, 166/255.0, 35/255.0), (110/255.0, 226/255.0, 105/255.0), (248/255.0, 231/255.0, 28/255.0), (0/255.0, 60/255.0, 255/255.0), (60/255.0, 60/255.0, 60/255.0)]
@@ -46,13 +29,7 @@ solid_classes = ["Residue", "Solid", "StirBar"]
 solid_colors = [(248/255.0, 231/255.0, 28/255.0), (0/255.0, 60/255.0, 255/255.0), (110/255.0, 226/255.0, 105/255.0)]
 liquid_classes = ["Homo", "Hetero", "Empty", "Cap"]
 liquid_colors = [(189, 16, 224), (245, 166, 35), (120, 120, 120), (60, 60, 60)]
-
-
 LOG = init_logger.get_logger('instance_seg.log')
-# MetadataCatalog.get("LLDataset").set(
-#    thing_classes=["Homogeneous Reaction", "Heterogeneous Reaction", "Residue", "Empty", "Solid", "StirBar"]).set(
-#     thing_colors=[(248, 231, 28), (0, 60, 255), (189, 16, 224), (60, 60, 60), (245, 166, 35), (110, 226, 105)])
-# LLDatasetMetadate = MetadataCatalog.get("LLDataset")
 
 
 def init_args():
@@ -71,9 +48,11 @@ def init_args():
     parser.add_argument('--use_cameras', type=int, default=0)
     return parser.parse_args()
 
+
 def initialize_vial_detector():
     model = torch.hub.load('./yolov5', 'custom', path='./vial/best.pt', source='local')
     return model
+
 
 def initialize_yolo(conf=0.5, nms_iou=0.2):
     liquid_model = torch.hub.load('./yolov5', 'custom', path='./liquid/best.pt', source='local')
@@ -86,37 +65,12 @@ def initialize_yolo(conf=0.5, nms_iou=0.2):
     return liquid_model, solid_model
 
 
-# def eval_yolo(im, boxes, liquid_predictor, scale=1.0):
-#     v_cropped = Visualizer(im,
-#                            metadata=LLDatasetMetadate,
-#                            scale=1.0,
-#                            instance_mode=ColorMode.SEGMENTATION
-#                            # remove the colors of unsegmented pixels. This option is only available for segmentation models
-#                            )
-#     for box in boxes:
-#         x, y, w, h, = box
-#         x, y, w, h = int(x*scale), int(y*scale), int(w*scale), int(h*scale)
-#         seg = im[y:y+h, x:x+w]
-#         results = liquid_predictor(batch, size=640)
-#         for boxp in results.xyxyn[0].to('cpu'):
-#             classp = int(boxp[5].item())
-#             scorep = boxp[4].item()
-#             if scorep < 0.5:
-#                 continue
-#             boxp = boxp[:4]*torch.Tensor([w, h, w, h]).to('cpu') + torch.Tensor([x, y, x, y]).to('cpu')
-#             v_cropped.draw_box(boxp, edge_color=liquid_colors[classp])
-#             v_cropped.draw_text(f'{liquid_classes[classp]}, {scorep:.2f}', tuple(boxp[:2].numpy()),
-#                                                         color=liquid_colors[classp])
-#     return v_cropped.get_output().get_image(), v_cropped.get_output().get_image()
-
-
 def eval_yolo_batch(ims, boxes, liquid_predictor, scale=1.0, batch_size=32):
     volumes = np.zeros((len(ims), len(boxes), 5))
     segs = np.zeros((len(ims), len(boxes), 5))
     turbidity = np.zeros((len(ims), len(boxes), 500))
     colors = np.zeros((len(ims), len(boxes), 5, 3))
     batch = []
-    turbidities = []
     ret_cropped = []
     ret_uncropped = []
     # start = time.time()
@@ -150,18 +104,6 @@ def eval_yolo_batch(ims, boxes, liquid_predictor, scale=1.0, batch_size=32):
     # return ims, ims, turbidity, colors, volumes, segs
     # start = time.time()
     for im_idx, im in enumerate(ims):
-        # start = time.time()
-        # v_cropped = Visualizer(im,
-        #                        metadata=LLDatasetMetadate,
-        #                        scale=1.0,
-        #                        instance_mode=ColorMode.SEGMENTATION
-        #                        # remove the colors of unsegmented pixels. This option is only available for segmentation models
-        #                        )
-        # end = time.time()
-        # LOG.info(f"Time to initialize visualizer {end-start}")
-
-        # start = time.time()
-
         for box_idx, box in enumerate(boxes):
             x, y, w, h, = box
             x, y, w, h = int(x*scale), int(y*scale), int(w*scale), int(h*scale)
@@ -187,8 +129,6 @@ def eval_yolo_batch(ims, boxes, liquid_predictor, scale=1.0, batch_size=32):
                 bx_colors.append(((np.mean(seg, (0, 1))).astype(np.uint8), m_y))
                 im = cv2.rectangle(im, tuple(boxp[:2].numpy().astype(int)), tuple(boxp[2:].numpy().astype(int)), liquid_colors[classp], 1)
                 im = cv2.putText(im, f'{liquid_classes[classp]}, {scorep:.2f}', tuple(boxp[:2].numpy().astype(int)), cv2.FONT_HERSHEY_SIMPLEX, 1, liquid_colors[classp], 1)
-                # v_cropped.draw_box(boxp, edge_color=liquid_colors[classp])
-                # v_cropped.draw_text(f'{liquid_classes[classp]}, {scorep:.2f}', tuple(boxp[:2].numpy()), color=liquid_colors[classp])
             bx_volumes = sorted(bx_volumes, key=lambda x: x[1])
             bx_colors = sorted(bx_colors, key=lambda x: x[1])
             for idx, vol in enumerate(bx_volumes):
@@ -231,7 +171,7 @@ def get_vials(frame, vial_detector, VESSEL_THRESH):
 
 def create_plots(turbs, vols, segs):
     turbs = turbs.astype(np.float16)
-    turbs /=255.0
+    turbs /= 255.0
     num_frames = turbs.shape[0]
     num_vials = turbs.shape[1]
     max_segs = vols.shape[2]
@@ -242,7 +182,6 @@ def create_plots(turbs, vols, segs):
             break
     rows = num_vials//cols
 
-    
     fig, axs = plt.subplots(cols, rows, figsize=(12, 8))
     fig.suptitle('Volume grid')
     if num_frames%30==0:
@@ -250,9 +189,6 @@ def create_plots(turbs, vols, segs):
     else:
         x = np.linspace(0, num_frames//30+1, num_frames//30+1)
     for i in tqdm.tqdm(range(num_vials)):
-        # fig, axs = plt.subplots(rows, cols, figsize=(12, 8))
-        # fig.suptitle('Volume grid')
-        # x = np.linspace(0, num_frames//30, num_frames)
         v_vols = vols[:, i, :]
         for j in range(max_segs):
             ax = v_vols[:, j]
@@ -265,28 +201,17 @@ def create_plots(turbs, vols, segs):
     plt.savefig('./output/insseg/volumes.jpg')
     plt.close()
 
-    
     turbidity_vid_writer = imageio.get_writer(f"./output/insseg/turbidities.mp4", fps=30)
     fig, axs = plt.subplots(rows, cols, figsize=(8, 12))
     fig.suptitle('Turbidity grid')
     x = np.flip(np.linspace(0, 1, 500))
-    # lines= []
-    # for i in range(num_vials):
-    #     row = i // cols
-    #     col = i % cols
-    #     lines.append(axs[row, col].plot(x, turbs[0, 0])[0])
     for fr in tqdm.tqdm(range(0, num_frames, 10)):
-        # fig, axs = plt.subplots(rows, cols, figsize=(12, 8))
-        # fig.suptitle('Turbidity grid')
-        # x = np.linspace(0, 1, 200)
         for i in range(num_vials):
             lines = []
             y = turbs[fr, i]
             row = i // cols
             col = i % cols
             lines.append(axs[row, col].plot(x, y)[0])
-            # lines[i].set_ydata(y)
-            # if fr==0:
             axs[row, col].set_title(f'Vial {i+1}')
             axs[row, col].set_xlim(0.0, 1.0)
             axs[row, col].set_ylim(0.0, 1.0)
@@ -294,15 +219,9 @@ def create_plots(turbs, vols, segs):
                 xdata, ydata = line.get_xdata(), line.get_ydata()
                 line.set_xdata(ydata)
                 line.set_ydata(xdata)
-                # line.axes.relim()
-                # line.axes.autoscale_view()
             for j in range(max_segs):
                 if segs[fr, i, j]!=0:
                     axs[row, col].axhline(y=segs[fr, i, j], color='red', linestyle='--')
-            # axs[row, col].set_xlim(0.0, 1.0)
-            # axs[row, col].set_ylim(0.0, 1.0)
-        # fig.canvas.draw()
-        # fig.canvas.flush_events()
         canvas = FigureCanvas(fig)
         canvas.draw()
         image_array = np.array(canvas.renderer.buffer_rgba())
@@ -311,19 +230,6 @@ def create_plots(turbs, vols, segs):
             row = i // cols
             col = i % cols
             axs[row, col].clear()
-        # plt.close()
-        # plt.savefig('./tmp.jpg')
-        # fig.clear()
-        # im = cv2.imread('./tmp.jpg')
-        # im = cv2.cvtColor(im, cv2.COLOR_BGR2RGB)
-        # turbidity_vid_writer.append_data(im)
-        # for i in range(num_vials):
-        #     row = i // cols
-        #     col = i % cols
-        #     axs[row, col].clear()
-        # for ax in axs:
-        #     ax.clear()
-        # plt.close()
     plt.close()
     turbidity_vid_writer.close()
 
@@ -356,11 +262,13 @@ def find_cams(num_cams):
     if len(ret_caps)<num_cams:
         LOG.warning(f"Found {len(ret_caps)} input video streams, but --use_cameras expects {num_cams}")
         return ret_caps
+    return ret_caps[:num_cams]
 
 
 def segment_video():
     args = init_args()
     input_image_path = args.input_image_path
+    cam_idx = []
     if input_image_path=="" and args.use_cameras==0:
         LOG.error('Usage: required one of --input_image_path or --use_cameras')
         return
@@ -371,7 +279,7 @@ def segment_video():
             return
     elif input_image_path=="":
         input_image_name = "Cameras"
-        cam_idx = find_cams(args.use_cameras)
+        cam_idx += find_cams(args.use_cameras)
         if cam_idx == []:
             LOG.error('Could not find any  cameras attached')
             return
@@ -390,6 +298,7 @@ def segment_video():
         while True:
             ans = input("Continue? (y/n)")
             if ans=="y" or ans=="Y":
+                LOG.info("To finish camera detections gracefully, press and hold the q key to stop the analysis!")
                 break
     if input_image_path=="":
         caps = [cv2.VideoCapture(i) for i in cam_idx]
@@ -411,38 +320,15 @@ def segment_video():
         frame = np.concatenate(frames, axis=0)
         frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         vial_bbox = get_vials(frame, vial_detector, VESSEL_THRESH)
-        # cv2.imwrite(f"./data/test_images/{input_image_name.split('.')[0]}_one_frame_tmp.jpg", results.plot())
-        # _ = [cap.release() for cap in caps]
     assert vial_bbox!=[]
     LOG.info(f"Detected {len(vial_bbox)} vials at: {vial_bbox}")
     # init cluster
-    LOG.info(f'Initializing HeinSight2.0')
-    # liquid_predictor, solid_predictor = initialize_yolo()
-    # vial_bbox = [[425, 45, 248, 680], [745, 29, 229, 700], [1080, 37, 238, 687], [1427, 36, 257, 681]]
-    # vial_bbox = [[65, 195, 296, 610], [437, 180, 291, 600], [871, 166, 253, 582], [1180, 160, 255, 578], [1523, 159, 291, 565]]
-    # vial_bbox = [[648, 30, 262, 713], [1005, 43, 265, 694], [1325, 35, 270, 705]]
-    # vial_bbox = [[303, 32, 303, 719], [702, 33, 273, 719], [984, 37, 268, 709], [1325, 37, 288, 707]]
-    # vial_bbox = [[447, 3, 156, 467], [764, 3, 157, 461]]
-    # vial_bbox = [[598, 128, 109, 312]]
-    # vial_bbox = [[597, 106, 118, 298]]
-    # vial_bbox = [vial_bbox[-1]]
-    # vial_bbox = [[616, 0, 107, 319]]
     create_plots((np.random.normal(size=(120, len(vial_bbox), 500))*255).astype(np.uint8), np.random.normal(size=(120, len(vial_bbox), 5)), np.random.normal(size=(120, len(vial_bbox), 5)))
     # save_data(np.random.normal(size=(100, 6, 200)), np.random.normal(size=(100, 6, 10, 3)), np.random.normal(size=(100, 6, 10)))
     writer1 = imageio.get_writer(f"./output/insseg/uncrop_{input_image_name.split('.')[0]}.mp4", fps=60)
     writer2 = imageio.get_writer(f"./output/insseg/crop_{input_image_name.split('.')[0]}.mp4", fps=60)
-    # cap = cv2.VideoCapture(input_image_path)
     LOG.info(f'Analysing Video')
     pbar = tqdm.tqdm()
-    # fps = cap.get(cv2.CAP_PROP_FPS)
-    # print(f"FPS: {fps}")
-    # num_context = 0
-    # frame_rate = int(round(fps))//6
-    # frame_drain = frame_rate
-    # max_buff = (num_context)*frame_rate
-    # min_buff = 0*frame_drain
-    # buff = []
-    # printed = False
     batch = []
     batch_size=args.batch_size//(len(vial_bbox))
     LOG.info(f"Batch size: {batch_size}")
@@ -472,25 +358,6 @@ def segment_video():
             if frame_count%batch_size != 0:
                 pbar.update(1)
                 continue
-            # if len(buff)<max_buff:
-            #     buff.append(resized_frame.copy())
-            # if len(buff)<min_buff:
-            #     buff.append(resized_frame.copy())
-            #     writer1.append_data(cv2.cvtColor(resized_frame, cv2.COLOR_BGR2RGB))
-            #     writer2.append_data(cv2.cvtColor(resized_frame, cv2.COLOR_BGR2RGB))
-            #     pbar.update(1)
-            #     continue
-            # frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            # context = buff[:-frame_rate+1:frame_rate]
-            # context = []
-            # if len(buff)<max_buff:
-            #     assert len(context)<num_context and len(context)!=0
-            # else:
-            #     assert len(context) == num_context
-            # if len(context)==num_context and not printed:
-            #     LOG.info(f"Max context reached {len(context), len(buff)}")
-            #     printed = True
-            # uncrop_im, crop_im = eval(resized_frame, vial_bbox, liquid_predictor, solid_predictor, scale=scale, context=context)
 
             uncrop_ims, crop_ims, turbidity, color, volume, seg = eval_yolo_batch(batch, vial_bbox, liquid_predictor, scale=scale, batch_size=args.batch_size)
             turbidities.append(turbidity)
@@ -505,7 +372,34 @@ def segment_video():
             #     buff.pop(0)
             pbar.update(1)
         else:
+            LOG.info("Video ended or camera didn't return a frame, ending gracefully")
             _ = [cap.release() for cap in caps]
+            if batch:
+                uncrop_ims, crop_ims, turbidity, color, volume, seg = eval_yolo_batch(batch, vial_bbox,
+                                                                                      liquid_predictor, scale=1.0,
+                                                                                      batch_size=len(batch))
+                turbidities.append(turbidity)
+                colors.append(color)
+                volumes.append(volume)
+                segs.append(seg)
+                for uncrop_im, crop_im in zip(uncrop_ims, crop_ims):
+                    writer1.append_data(uncrop_im)
+                    writer2.append_data(crop_im)
+            break
+        if args.use_cameras != 0 and keyboard.is_pressed('q'):
+            LOG.info("q pressed, ending gracefully")
+            _ = [cap.release() for cap in caps]
+            if batch:
+                uncrop_ims, crop_ims, turbidity, color, volume, seg = eval_yolo_batch(batch, vial_bbox,
+                                                                                      liquid_predictor, scale=1.0,
+                                                                                      batch_size=len(batch))
+                turbidities.append(turbidity)
+                colors.append(color)
+                volumes.append(volume)
+                segs.append(seg)
+                for uncrop_im, crop_im in zip(uncrop_ims, crop_ims):
+                    writer1.append_data(uncrop_im)
+                    writer2.append_data(crop_im)
             break
     writer1.close()
     writer2.close()
@@ -523,6 +417,7 @@ def segment_video():
     LOG.info(f'Videos saved at ./output/insseg/')
 
     return
+
 
 if __name__ == '__main__':
     """
