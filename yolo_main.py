@@ -43,6 +43,7 @@ def init_args():
     parser.add_argument('--insseg_cfg_path', type=str, default='./config/insseg.yaml')
     parser.add_argument('--batch_size', type=int, default=64)
     parser.add_argument('--nms_iou', type=float, default=0.2)
+    parser.add_argument('--conf', type=float, default=0.5)
     parser.add_argument('--create_plots', action='store_true')
     parser.add_argument('--save_dir', type=str, default='./output/insseg')
     parser.add_argument('--use_text_prefix', action='store_true')
@@ -59,6 +60,7 @@ def initialize_yolo(conf=0.5, nms_iou=0.2):
     liquid_model = torch.hub.load('./yolov5', 'custom', path='./liquid/best.pt', source='local')
     # liquid_model.to('cuda')
     LOG.info(f"IOU threshold for NMS set to {nms_iou}")
+    LOG.info(f"Confidence score threshold set to {conf}")
     liquid_model.conf = conf
     liquid_model.iou=nms_iou
     liquid_model.agnostic=True
@@ -115,8 +117,8 @@ def eval_yolo_batch(ims, boxes, liquid_predictor, scale=1.0, batch_size=32):
                 list_box = boxp.tolist()
                 classp = int(list_box[5])
                 scorep = list_box[4]
-                if scorep < 0.5:
-                    continue
+                # if scorep < 0.25:
+                #     continue
                 if list_box[1]<lowest_h:
                     lowest_h = list_box[1]
                 m_y = (list_box[1]+list_box[3])/2.0
@@ -129,7 +131,7 @@ def eval_yolo_batch(ims, boxes, liquid_predictor, scale=1.0, batch_size=32):
                 # if liquid_classes[classp] != "Empty":
                 bx_colors.append(((np.mean(seg, (0, 1))).astype(np.uint8), m_y))
                 im = cv2.rectangle(im, tuple(boxp[:2].numpy().astype(int)), tuple(boxp[2:].numpy().astype(int)), liquid_colors[classp], 1)
-                im = cv2.putText(im, f'{liquid_classes[classp]}, {scorep:.2f}', tuple(boxp[:2].numpy().astype(int)), cv2.FONT_HERSHEY_SIMPLEX, 1, liquid_colors[classp], 1)
+                im = cv2.putText(im, f'{liquid_classes[classp]}, {scorep:.2f}', tuple(boxp[:2].numpy().astype(int)), cv2.FONT_HERSHEY_SIMPLEX, 0.75, liquid_colors[classp], 1)
             bx_volumes = sorted(bx_volumes, key=lambda x: x[1])
             bx_colors = sorted(bx_colors, key=lambda x: x[1])
             for idx, vol in enumerate(bx_volumes):
@@ -140,7 +142,7 @@ def eval_yolo_batch(ims, boxes, liquid_predictor, scale=1.0, batch_size=32):
         # end = time.time()
         # LOG.info(f"Time to create visualizations {end-start}")
         # start = time.time()
-        im = cv2.resize(im, (1920, 1080))
+        # im = cv2.resize(im, (1920, 1080))
         ret_cropped.append(im)
         ret_uncropped.append(im)
     # end = time.time()
@@ -182,6 +184,39 @@ def create_plots(turbs, vols, segs):
             cols = i
             break
     rows = num_vials//cols
+
+    if num_frames==1:
+        fig, axs = plt.subplots(rows, cols, figsize=(8, 12))
+        fig.suptitle('Turbidity grid')
+        x = np.flip(np.linspace(0, 1, 500))
+        fr=0
+        for i in range(num_vials):
+            lines = []
+            y = turbs[fr, i]
+            row = i // cols
+            col = i % cols
+            if rows == 1 and cols == 1:
+                ax = axs
+            elif rows == 1:
+                ax = axs[col]
+            elif cols == 1:
+                ax = axs[row]
+            else:
+                ax = axs[row, col]
+            lines.append(ax.plot(x, y)[0])
+            ax.set_title(f'Vial {i + 1}')
+            ax.set_xlim(0.0, 1.0)
+            ax.set_ylim(0.0, 1.0)
+            for line in lines:
+                xdata, ydata = line.get_xdata(), line.get_ydata()
+                line.set_xdata(ydata)
+                line.set_ydata(xdata)
+            for j in range(max_segs):
+                if segs[fr, i, j] != 0:
+                    ax.axhline(y=segs[fr, i, j], color='red', linestyle='--')
+        plt.savefig('./output/insseg/turbidites.jpg')
+        plt.close()
+        return
 
     fig, axs = plt.subplots(cols, rows, figsize=(12, 8))
     fig.suptitle('Volume grid')
@@ -348,7 +383,7 @@ def segment_video():
     LOG.info(f"Initializing vessel detector")
     VESSEL_THRESH = 0.7
     vial_detector = initialize_vial_detector()
-    liquid_predictor, solid_predictor = initialize_yolo(nms_iou=args.nms_iou)
+    liquid_predictor, solid_predictor = initialize_yolo(conf=args.conf, nms_iou=args.nms_iou)
     if input_image_path=="":
         LOG.opt(raw=True).info("Since --use_cameras was used, waiting for experiment setup to complete\n")
         while True:
@@ -359,6 +394,23 @@ def segment_video():
     # create_plots((np.random.normal(size=(120, 5, 500)) * 255).astype(np.uint8),
     #              np.random.normal(size=(120, 5, 5)), np.random.normal(size=(120, 5, 5)))
     # return
+    if ops.split(input_image_path)[1].endswith(("jpg", "jpeg", "png", "JPG", "JPEG", "PNG")):
+        LOG.info("Detected Image type input, switing to image analysis")
+        im = cv2.imread(input_image_path)
+        im = cv2.resize(im, (1920, 1080))
+        im = cv2.cvtColor(im, cv2.COLOR_BGR2RGB)
+        vial_bbox = get_vials(im, vial_detector, VESSEL_THRESH)
+        if len(vial_bbox)==0:
+            LOG.error("Found no vials in the image")
+            return
+        LOG.info(f"Detected {len(vial_bbox)} vials at: {vial_bbox}")
+        uncrop_ims, crop_ims, turbidity, color, volume, seg = eval_yolo_batch([im], vial_bbox, liquid_predictor, scale=1.0, batch_size=len(vial_bbox))
+        create_plots(turbidity, volume, seg)
+        crop_ims = cv2.cvtColor(crop_ims[0], cv2.COLOR_BGR2RGB)
+        cv2.imwrite("./output/insseg/output.jpg", crop_ims)
+        LOG.info("Detections saved at ./output/insseg/output.jpg")
+        return
+
     if input_image_path=="":
         caps = [cv2.VideoCapture(i) for i in cam_idx]
     else:
