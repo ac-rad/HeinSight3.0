@@ -8,6 +8,7 @@ import cv2
 import numpy as np
 import tqdm
 import torch
+import device
 import time
 from local_utils.log_util import init_logger
 from local_utils.config_utils import parse_config_utils
@@ -191,13 +192,21 @@ def create_plots(turbs, vols, segs):
     for i in tqdm.tqdm(range(num_vials)):
         v_vols = vols[:, i, :]
         for j in range(max_segs):
-            ax = v_vols[:, j]
-            any_data = np.any(ax!=0)
+            v_vol = v_vols[:, j]
+            any_data = np.any(v_vol!=0)
             if any_data:
                 row = i // cols
                 col = i % cols
-                axs[col, row].plot(x, ax[::30])
-                axs[col, row].set_title(f'Vial {i+1}')
+                if rows == 1 and cols == 1:
+                    ax = axs
+                elif rows == 1:
+                    ax = axs[col]
+                elif cols == 1:
+                    ax = axs[row]
+                else:
+                    ax = axs[col, row]
+                ax.plot(x, v_vol[::30])
+                ax.set_title(f'Vial {i+1}')
     plt.savefig('./output/insseg/volumes.jpg')
     plt.close()
 
@@ -211,17 +220,25 @@ def create_plots(turbs, vols, segs):
             y = turbs[fr, i]
             row = i // cols
             col = i % cols
-            lines.append(axs[row, col].plot(x, y)[0])
-            axs[row, col].set_title(f'Vial {i+1}')
-            axs[row, col].set_xlim(0.0, 1.0)
-            axs[row, col].set_ylim(0.0, 1.0)
+            if rows == 1 and cols == 1:
+                ax = axs
+            elif rows == 1:
+                ax = axs[col]
+            elif cols == 1:
+                ax = axs[row]
+            else:
+                ax = axs[row, col]
+            lines.append(ax.plot(x, y)[0])
+            ax.set_title(f'Vial {i+1}')
+            ax.set_xlim(0.0, 1.0)
+            ax.set_ylim(0.0, 1.0)
             for line in lines:
                 xdata, ydata = line.get_xdata(), line.get_ydata()
                 line.set_xdata(ydata)
                 line.set_ydata(xdata)
             for j in range(max_segs):
                 if segs[fr, i, j]!=0:
-                    axs[row, col].axhline(y=segs[fr, i, j], color='red', linestyle='--')
+                    ax.axhline(y=segs[fr, i, j], color='red', linestyle='--')
         canvas = FigureCanvas(fig)
         canvas.draw()
         image_array = np.array(canvas.renderer.buffer_rgba())
@@ -229,7 +246,15 @@ def create_plots(turbs, vols, segs):
         for i in range(num_vials):
             row = i // cols
             col = i % cols
-            axs[row, col].clear()
+            if rows == 1 and cols == 1:
+                ax = axs
+            elif rows == 1:
+                ax = axs[col]
+            elif cols == 1:
+                ax = axs[row]
+            else:
+                ax = axs[row, col]
+            ax.clear()
     plt.close()
     turbidity_vid_writer.close()
 
@@ -252,17 +277,48 @@ def save_data(turbs, cols, vols):
 
 def find_cams(num_cams):
     ret_caps = []
+    device_list = device.getDeviceList()
     for i in range(100):
         try:
             cap = cv2.VideoCapture(i)
             if not (cap is None or not cap.isOpened()):
                 ret_caps.append(i)
+                cap.release()
         except:
                 continue
     if len(ret_caps)<num_cams:
         LOG.warning(f"Found {len(ret_caps)} input video streams, but --use_cameras expects {num_cams}")
-        return ret_caps
-    return ret_caps[:num_cams]
+    LOG.opt(raw=True).info("Cameras found below:\n")
+    for idx, camera in enumerate(device_list):
+        LOG.opt(raw=True).info(str(ret_caps[idx]) + ': ' + camera[0] + '\n')
+    cameras_set = False
+    while not cameras_set:
+        ans = input("Input the cameras (first value from device list) you would like to use as a comma separated string eg: 0,1\n")
+        idxs = ans.split(',')
+        try:
+            idxs = [int(idx) for idx in idxs]
+            num_err = False
+            for idx in idxs:
+                if idx not in ret_caps:
+                    LOG.error(f"Received index not in options {idx}")
+                    num_err = True
+                    break
+            if num_err:
+                continue
+            elif len(idxs) != num_cams:
+                conf = input(f"Received {len(idxs)} cameras to use but --use_cameras required {num_cams}.\n Continue with {idxs} (y/n)")
+                if conf == "y" or conf == "Y":
+                    ret_caps = idxs
+                    LOG.info(f"Cameras set to {ret_caps}")
+                    cameras_set = True
+            else:
+                ret_caps = idxs[:]
+                LOG.info(f"Cameras set to {ret_caps}")
+                cameras_set = True
+        except:
+            LOG.error("Received a non-number camera index")
+
+    return ret_caps
 
 
 def segment_video():
@@ -294,12 +350,15 @@ def segment_video():
     vial_detector = initialize_vial_detector()
     liquid_predictor, solid_predictor = initialize_yolo(nms_iou=args.nms_iou)
     if input_image_path=="":
-        LOG.info("Since --use_cameras was used, waiting for experiment setup to complete")
+        LOG.opt(raw=True).info("Since --use_cameras was used, waiting for experiment setup to complete\n")
         while True:
             ans = input("Continue? (y/n)")
             if ans=="y" or ans=="Y":
                 LOG.info("To finish camera detections gracefully, press and hold the esc key to stop the analysis!")
                 break
+    # create_plots((np.random.normal(size=(120, 5, 500)) * 255).astype(np.uint8),
+    #              np.random.normal(size=(120, 5, 5)), np.random.normal(size=(120, 5, 5)))
+    # return
     if input_image_path=="":
         caps = [cv2.VideoCapture(i) for i in cam_idx]
     else:
@@ -323,7 +382,7 @@ def segment_video():
     assert vial_bbox!=[]
     LOG.info(f"Detected {len(vial_bbox)} vials at: {vial_bbox}")
     # init cluster
-    create_plots((np.random.normal(size=(120, len(vial_bbox), 500))*255).astype(np.uint8), np.random.normal(size=(120, len(vial_bbox), 5)), np.random.normal(size=(120, len(vial_bbox), 5)))
+    # create_plots((np.random.normal(size=(120, len(vial_bbox), 500))*255).astype(np.uint8), np.random.normal(size=(120, len(vial_bbox), 5)), np.random.normal(size=(120, len(vial_bbox), 5)))
     # save_data(np.random.normal(size=(100, 6, 200)), np.random.normal(size=(100, 6, 10, 3)), np.random.normal(size=(100, 6, 10)))
     writer1 = imageio.get_writer(f"./output/insseg/uncrop_{input_image_name.split('.')[0]}.mp4", fps=60)
     writer2 = imageio.get_writer(f"./output/insseg/crop_{input_image_name.split('.')[0]}.mp4", fps=60)
