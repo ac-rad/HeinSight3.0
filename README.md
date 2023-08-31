@@ -1,4 +1,5 @@
 # Segment-Anything-U-Specify
+# It is Rama
 Use SAM and CLIP model to segment unique instances you want.
 You may use this repo to segment any instances in the picture with
 text prompts.
