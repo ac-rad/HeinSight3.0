@@ -18,6 +18,9 @@ from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
 import pandas as pd
 import matplotlib.style as mplstyle
 import matplotlib as mpl
+from ultralytics import YOLO
+NMS_IOU = 0.1
+CONF = 0.5
 mpl.rcParams['path.simplify'] = True
 mpl.rcParams['path.simplify_threshold'] = 1.0
 mplstyle.use('fast')
@@ -47,6 +50,7 @@ def init_args():
     parser.add_argument('--create_plots', action='store_true')
     parser.add_argument('--save_dir', type=str, default='./output/insseg')
     parser.add_argument('--use_text_prefix', action='store_true')
+    parser.add_argument('--v8', default=False, action='store_true')
     parser.add_argument('--use_cameras', type=int, default=0)
     return parser.parse_args()
 
@@ -56,19 +60,25 @@ def initialize_vial_detector():
     return model
 
 
-def initialize_yolo(conf=0.5, nms_iou=0.2):
-    liquid_model = torch.hub.load('./yolov5', 'custom', path='./liquid/best.pt', source='local')
-    # liquid_model.to('cuda')
-    LOG.info(f"IOU threshold for NMS set to {nms_iou}")
-    LOG.info(f"Confidence score threshold set to {conf}")
-    liquid_model.conf = conf
-    liquid_model.iou=nms_iou
-    liquid_model.agnostic=True
+def initialize_yolo(conf=0.5, nms_iou=0.2, v8=False):
+    global CONF ; CONF = conf
+    global NMS_IOU; NMS_IOU = nms_iou
+
+    if not v8:
+        liquid_model = torch.hub.load('./yolov5', 'custom', path='./liquid/best.pt', source='local')
+        # liquid_model.to('cuda')
+        LOG.info(f"IOU threshold for NMS set to {nms_iou}")
+        LOG.info(f"Confidence score threshold set to {conf}")
+        liquid_model.conf = conf
+        liquid_model.iou=nms_iou
+        liquid_model.agnostic=True
+    else:
+        liquid_model = YOLO('./liquid/v8/best.pt')
     solid_model = torch.hub.load('./yolov5', 'custom', path='./solid/best.pt', source='local')
     return liquid_model, solid_model
 
 
-def eval_yolo_batch(ims, boxes, liquid_predictor, scale=1.0, batch_size=32):
+def eval_yolo_batch(ims, boxes, liquid_predictor, scale=1.0, batch_size=32, v8=False):
     volumes = np.zeros((len(ims), len(boxes), 5))
     segs = np.zeros((len(ims), len(boxes), 5))
     turbidity = np.zeros((len(ims), len(boxes), 500))
@@ -100,7 +110,10 @@ def eval_yolo_batch(ims, boxes, liquid_predictor, scale=1.0, batch_size=32):
     # LOG.info(f"Time to initialize batch {end-start}")
     # LOG.info(f"Batch length {len(batch)}")
     # start = time.time()
-    results = liquid_predictor(batch, size=640)
+    if v8:
+        results = liquid_predictor(batch, imgsz=640, conf=CONF, iou=NMS_IOU, agnostic_nms=True)
+    else:
+        results = liquid_predictor(batch, size=640)
     # return ims, ims, turbidity, colors, volumes, segs
     # end = time.time()
     # LOG.info(f"Inference time for {len(batch)}: {end-start}")
@@ -113,7 +126,11 @@ def eval_yolo_batch(ims, boxes, liquid_predictor, scale=1.0, batch_size=32):
             lowest_h = 2
             bx_volumes = []
             bx_colors = []
-            for boxp in results.xyxyn[im_idx*len(boxes)+box_idx].to('cpu'):
+            if v8:
+                pred_boxes = torch.cat((results[im_idx*len(boxes)+box_idx].boxes.xyxyn, torch.unsqueeze(results[im_idx*len(boxes)+box_idx].boxes.conf, -1), torch.unsqueeze(results[im_idx*len(boxes)+box_idx].boxes.cls, -1)), dim=1).to('cpu')
+            else:
+                pred_boxes = results.xyxyn[im_idx*len(boxes)+box_idx].to('cpu')
+            for boxp in pred_boxes:
                 list_box = boxp.tolist()
                 classp = int(list_box[5])
                 scorep = list_box[4]
@@ -359,6 +376,10 @@ def find_cams(num_cams):
 def segment_video():
     args = init_args()
     input_image_path = args.input_image_path
+    if args.v8:
+        LOG.info("Using v8 model")
+    else:
+        LOG.info("Using v5 model")
     cam_idx = []
     if input_image_path=="" and args.use_cameras==0:
         LOG.error('Usage: required one of --input_image_path or --use_cameras')
@@ -383,7 +404,7 @@ def segment_video():
     LOG.info(f"Initializing vessel detector")
     VESSEL_THRESH = 0.7
     vial_detector = initialize_vial_detector()
-    liquid_predictor, solid_predictor = initialize_yolo(conf=args.conf, nms_iou=args.nms_iou)
+    liquid_predictor, solid_predictor = initialize_yolo(conf=args.conf, nms_iou=args.nms_iou, v8=args.v8)
     if input_image_path=="":
         LOG.opt(raw=True).info("Since --use_cameras was used, waiting for experiment setup to complete\n")
         while True:
@@ -404,7 +425,7 @@ def segment_video():
             LOG.error("Found no vials in the image")
             return
         LOG.info(f"Detected {len(vial_bbox)} vials at: {vial_bbox}")
-        uncrop_ims, crop_ims, turbidity, color, volume, seg = eval_yolo_batch([im], vial_bbox, liquid_predictor, scale=1.0, batch_size=len(vial_bbox))
+        uncrop_ims, crop_ims, turbidity, color, volume, seg = eval_yolo_batch([im], vial_bbox, liquid_predictor, scale=1.0, batch_size=len(vial_bbox), v8=args.v8)
         create_plots(turbidity, volume, seg)
         crop_ims = cv2.cvtColor(crop_ims[0], cv2.COLOR_BGR2RGB)
         cv2.imwrite("./output/insseg/output.jpg", crop_ims)
@@ -470,7 +491,7 @@ def segment_video():
                 pbar.update(1)
                 continue
 
-            uncrop_ims, crop_ims, turbidity, color, volume, seg = eval_yolo_batch(batch, vial_bbox, liquid_predictor, scale=scale, batch_size=args.batch_size)
+            uncrop_ims, crop_ims, turbidity, color, volume, seg = eval_yolo_batch(batch, vial_bbox, liquid_predictor, scale=scale, batch_size=args.batch_size, v8=args.v8)
             turbidities.append(turbidity)
             colors.append(color)
             volumes.append(volume)
@@ -488,7 +509,7 @@ def segment_video():
             if batch:
                 uncrop_ims, crop_ims, turbidity, color, volume, seg = eval_yolo_batch(batch, vial_bbox,
                                                                                       liquid_predictor, scale=1.0,
-                                                                                      batch_size=len(batch))
+                                                                                      batch_size=len(batch), v8=args.v8)
                 turbidities.append(turbidity)
                 colors.append(color)
                 volumes.append(volume)
@@ -503,7 +524,7 @@ def segment_video():
             if batch:
                 uncrop_ims, crop_ims, turbidity, color, volume, seg = eval_yolo_batch(batch, vial_bbox,
                                                                                       liquid_predictor, scale=1.0,
-                                                                                      batch_size=len(batch))
+                                                                                      batch_size=len(batch), v8=args.v8)
                 turbidities.append(turbidity)
                 colors.append(color)
                 volumes.append(volume)
