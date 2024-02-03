@@ -31,6 +31,7 @@ solid_colors = [(248/255.0, 231/255.0, 28/255.0), (0/255.0, 60/255.0, 255/255.0)
 liquid_classes = ["Homo", "Hetero", "Empty", "Cap"]
 liquid_colors = [(189, 16, 224), (245, 166, 35), (120, 120, 120), (60, 60, 60)]
 LOG = init_logger.get_logger('instance_seg.log')
+VIAL_SIZE = 1.8  # mL
 
 
 def init_args():
@@ -135,7 +136,7 @@ def eval_yolo_batch(ims, boxes, liquid_predictor, scale=1.0, batch_size=32):
             bx_volumes = sorted(bx_volumes, key=lambda x: x[1])
             bx_colors = sorted(bx_colors, key=lambda x: x[1])
             for idx, vol in enumerate(bx_volumes):
-                volumes[im_idx, box_idx, idx]+= vol[0]*5.0/(1-lowest_h)  #height in volume graph
+                volumes[im_idx, box_idx, idx]+= vol[0]*VIAL_SIZE/(1-lowest_h)  #height in volume graph
                 segs[im_idx, box_idx, idx]+=(1-vol[2])
             for idx, col in enumerate(bx_colors):
                 colors[im_idx, box_idx, idx] += col[0]
@@ -295,11 +296,14 @@ def create_plots(turbs, vols, segs):
     turbidity_vid_writer.close()
 
 
-def save_data(turbs, cols, vols):
+def save_data(turbs, cols, vols, fps):
+    os.makedirs("./output/raw_data", exist_ok=True)
     num_vials = vols.shape[1]
     max_num_segments = vols.shape[2]
     volume_df = pd.DataFrame({})
     color_df = pd.DataFrame({})
+    volume_df["Time"] = [i / fps / 60 for i in range(vols.shape[0])]
+    color_df["Time"] = [i / fps / 60 for i in range(vols.shape[0])]
     for i in range(num_vials):
         for j in range(max_num_segments):
             if np.any(vols[:, i, j]!=0):
@@ -423,6 +427,8 @@ def segment_video():
         ret = True
         frames = []
         for cap in caps:
+            fps = int(cap.get(cv2.CAP_PROP_FPS))
+            LOG.info(f"Current capture rate is {fps} fps")
             c_ret, frame = cap.read()
             frames.append(frame)
             ret = ret and c_ret
@@ -524,7 +530,7 @@ def segment_video():
     # LOG.info(turbidities.shape)
     # LOG.info(colors.shape)
     # LOG.info(volumes.shape)
-    save_data(turbidities, colors, volumes)
+    save_data(turbidities, colors, volumes, fps)
     if args.create_plots:
         create_plots(turbidities, volumes, segs)
     LOG.info(f'Videos saved at ./output/insseg/')
