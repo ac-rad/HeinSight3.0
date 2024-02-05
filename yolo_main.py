@@ -63,8 +63,8 @@ def initialize_yolo(conf=0.5, nms_iou=0.2):
     LOG.info(f"IOU threshold for NMS set to {nms_iou}")
     LOG.info(f"Confidence score threshold set to {conf}")
     liquid_model.conf = conf
-    liquid_model.iou=nms_iou
-    liquid_model.agnostic=True
+    liquid_model.iou = nms_iou
+    liquid_model.agnostic = True
     solid_model = torch.hub.load('./yolov5', 'custom', path='./solid/best.pt', source='local')
     return liquid_model, solid_model
 
@@ -81,8 +81,8 @@ def eval_yolo_batch(ims, boxes, liquid_predictor, scale=1.0, batch_size=32):
     for im_idx, im in enumerate(ims):
         for b_idx, box in enumerate(boxes):
             x, y, w, h, = box
-            x, y, w, h = int(x*scale), int(y*scale), int(w*scale), int(h*scale)
-            seg = im[y:y+h, x:x+w]
+            x, y, w, h = int(x * scale), int(y * scale), int(w * scale), int(h * scale)
+            seg = im[y:y + h, x:x + w]
             turb = cv2.resize(seg.copy(), (100, 500))
             hsv = cv2.cvtColor(turb, cv2.COLOR_RGB2HSV)
             v = np.mean(hsv[:, :, -1], axis=-1)
@@ -110,34 +110,38 @@ def eval_yolo_batch(ims, boxes, liquid_predictor, scale=1.0, batch_size=32):
     for im_idx, im in enumerate(ims):
         for box_idx, box in enumerate(boxes):
             x, y, w, h, = box
-            x, y, w, h = int(x*scale), int(y*scale), int(w*scale), int(h*scale)
+            x, y, w, h = int(x * scale), int(y * scale), int(w * scale), int(h * scale)
             lowest_h = 2
             bx_volumes = []
             bx_colors = []
-            for boxp in results.xyxyn[im_idx*len(boxes)+box_idx].to('cpu'):
+            for boxp in results.xyxyn[im_idx * len(boxes) + box_idx].to('cpu'):
                 list_box = boxp.tolist()
                 classp = int(list_box[5])
                 scorep = list_box[4]
                 # if scorep < 0.25:
                 #     continue
-                if list_box[1]<lowest_h:
+                if list_box[1] < lowest_h:
                     lowest_h = list_box[1]
-                m_y = (list_box[1]+list_box[3])/2.0
+                m_y = (list_box[1] + list_box[3]) / 2.0
                 # if liquid_classes[classp] != "Empty":
-                bx_volumes.append((list_box[3]-list_box[1], m_y, list_box[1]))
-                boxp = boxp[:4]*torch.Tensor([w, h, w, h]).to('cpu') + torch.Tensor([x, y, x, y]).to('cpu')
+                bx_volumes.append((list_box[3] - list_box[1], m_y, list_box[1]))
+                boxp = boxp[:4] * torch.Tensor([w, h, w, h]).to('cpu') + torch.Tensor([x, y, x, y]).to('cpu')
                 boxp = boxp.to('cpu')
                 list_boxp = boxp.tolist()
                 seg = im[int(list_boxp[1]):int(list_boxp[3]), int(list_boxp[0]):int(list_boxp[2])]
                 # if liquid_classes[classp] != "Empty":
                 bx_colors.append(((np.mean(seg, (0, 1))).astype(np.uint8), m_y))
-                im = cv2.rectangle(im, tuple(boxp[:2].numpy().astype(int)), tuple(boxp[2:].numpy().astype(int)), liquid_colors[classp], 2)
-                im = cv2.putText(im, f'{liquid_classes[classp]}, {scorep:.2f}', tuple(boxp[:2].numpy().astype(int)), cv2.FONT_HERSHEY_SIMPLEX, 0.75, liquid_colors[classp], 2)
+                im = cv2.rectangle(im, tuple(boxp[:2].numpy().astype(int)), tuple(boxp[2:].numpy().astype(int)),
+                                   liquid_colors[classp], 2)
+                im = cv2.putText(im, f'{liquid_classes[classp]}, {scorep:.2f}', tuple(boxp[:2].numpy().astype(int)),
+                                 cv2.FONT_HERSHEY_SIMPLEX, 0.75, liquid_colors[classp], 2)
             bx_volumes = sorted(bx_volumes, key=lambda x: x[1])
+            bx_volumes = flip_volumes(bx_volumes)
             bx_colors = sorted(bx_colors, key=lambda x: x[1])
+            bx_colors = flip_volumes(bx_colors)
             for idx, vol in enumerate(bx_volumes):
-                volumes[im_idx, box_idx, idx]+= vol[0]*VIAL_SIZE/(1-lowest_h)  #height in volume graph
-                segs[im_idx, box_idx, idx]+=(1-vol[2])
+                volumes[im_idx, box_idx, idx] += vol[0] * VIAL_SIZE / (1 - lowest_h)  # height in volume graph
+                segs[im_idx, box_idx, idx] += (1 - vol[2])
             for idx, col in enumerate(bx_colors):
                 colors[im_idx, box_idx, idx] += col[0]
         # end = time.time()
@@ -155,17 +159,17 @@ def eval_yolo_batch(ims, boxes, liquid_predictor, scale=1.0, batch_size=32):
 
 
 def get_vials(frame, vial_detector, VESSEL_THRESH):
-    H, W, _ = frame.shape 
+    H, W, _ = frame.shape
     results = vial_detector(frame)
-    results.save(save_dir='./output/insseg', exist_ok=True)   # saves vials images
+    results.save(save_dir='./output/insseg', exist_ok=True)  # saves vials images
     # LOG.info(results.xyxyn[0][:, 4])
-    mask = results.xyxyn[0][:, 4]>=VESSEL_THRESH
+    mask = results.xyxyn[0][:, 4] >= VESSEL_THRESH
     # LOG.info(mask)
     indices = torch.nonzero(mask)
     # LOG.info(indices)
     results.xyxyn[0] = torch.squeeze(results.xyxyn[0][indices], dim=1)
     # LOG.info(results.xyxyn[0][:, :4].shape)
-    vial_bbox = results.xyxyn[0][:, :4].to('cpu')*torch.tensor([W, H, W, H]).to('cpu')
+    vial_bbox = results.xyxyn[0][:, :4].to('cpu') * torch.tensor([W, H, W, H]).to('cpu')
     vial_bbox[:, 2] = vial_bbox[:, 2] - vial_bbox[:, 0]
     vial_bbox[:, 3] = vial_bbox[:, 3] - vial_bbox[:, 1]
     vial_bbox = vial_bbox.to(torch.int32).tolist()
@@ -180,17 +184,17 @@ def create_plots(turbs, vols, segs):
     num_vials = turbs.shape[1]
     max_segs = vols.shape[2]
     cols = num_vials
-    for i in range(int(math.sqrt(num_vials)+1), 1, -1):
-        if num_vials%i==0:
+    for i in range(int(math.sqrt(num_vials) + 1), 1, -1):
+        if num_vials % i == 0:
             cols = i
             break
-    rows = num_vials//cols
+    rows = num_vials // cols
 
-    if num_frames==1:
+    if num_frames == 1:
         fig, axs = plt.subplots(rows, cols, figsize=(8, 12))
         fig.suptitle('Turbidity grid')
         x = np.flip(np.linspace(0, 1, 500))
-        fr=0
+        fr = 0
         for i in range(num_vials):
             lines = []
             y = turbs[fr, i]
@@ -221,15 +225,15 @@ def create_plots(turbs, vols, segs):
 
     fig, axs = plt.subplots(cols, rows, figsize=(12, 8))
     fig.suptitle('Volume grid')
-    if num_frames%30==0:
-        x = np.linspace(0, num_frames//30, num_frames//30)
+    if num_frames % 30 == 0:
+        x = np.linspace(0, num_frames // 30, num_frames // 30)
     else:
-        x = np.linspace(0, num_frames//30+1, num_frames//30+1)
+        x = np.linspace(0, num_frames // 30 + 1, num_frames // 30 + 1)
     for i in tqdm.tqdm(range(num_vials)):
         v_vols = vols[:, i, :]
         for j in range(max_segs):
             v_vol = v_vols[:, j]
-            any_data = np.any(v_vol!=0)
+            any_data = np.any(v_vol != 0)
             if any_data:
                 row = i // cols
                 col = i % cols
@@ -242,7 +246,7 @@ def create_plots(turbs, vols, segs):
                 else:
                     ax = axs[col, row]
                 ax.plot(x, v_vol[::30])
-                ax.set_title(f'Vial {i+1}')
+                ax.set_title(f'Vial {i + 1}')
     plt.savefig('./output/insseg/volumes.jpg')
     plt.close()
 
@@ -251,7 +255,7 @@ def create_plots(turbs, vols, segs):
     # fig.suptitle('Turbidity grid') 
     x = np.flip(np.linspace(0, 1, 500))
     for fr in tqdm.tqdm(range(0, num_frames, 10)):
-        fig.suptitle(f"Turbidity graph {fr/30.0}s")
+        fig.suptitle(f"Turbidity graph {fr / 30.0}s")
         for i in range(num_vials):
             lines = []
             y = turbs[fr, i]
@@ -266,7 +270,7 @@ def create_plots(turbs, vols, segs):
             else:
                 ax = axs[row, col]
             lines.append(ax.plot(x, y)[0])
-            ax.set_title(f'Vial {i+1}')
+            ax.set_title(f'Vial {i + 1}')
             ax.set_xlim(0.0, 1.0)
             ax.set_ylim(0.0, 1.0)
             for line in lines:
@@ -274,7 +278,7 @@ def create_plots(turbs, vols, segs):
                 line.set_xdata(ydata)
                 line.set_ydata(xdata)
             for j in range(max_segs):
-                if segs[fr, i, j]!=0:
+                if segs[fr, i, j] != 0:
                     ax.axhline(y=segs[fr, i, j], color='red', linestyle='--')
         canvas = FigureCanvas(fig)
         canvas.draw()
@@ -306,11 +310,11 @@ def save_data(turbs, cols, vols, fps):
     color_df["Time"] = [i / fps / 60 for i in range(vols.shape[0])]
     for i in range(num_vials):
         for j in range(max_num_segments):
-            if np.any(vols[:, i, j]!=0):
-                volume_df[f"vial {i+1} segment {j+1}"] = vols[:, i, j]
-            if np.any(cols[:, i, j, :]!=0):
-                color_df[f"vial {i+1} segment {j+1}"] = np.split(cols[:, i, j, :], cols.shape[0], axis=0)
-        np.save(f"./output/raw_data/turb_vial_{i+1}.npy", turbs[:, i, :])
+            if np.any(vols[:, i, j] != 0):
+                volume_df[f"vial {i + 1} segment {j + 1}"] = vols[:, i, j]
+            if np.any(cols[:, i, j, :] != 0):
+                color_df[f"vial {i + 1} segment {j + 1}"] = np.split(cols[:, i, j, :], cols.shape[0], axis=0)
+        np.save(f"./output/raw_data/turb_vial_{i + 1}.npy", turbs[:, i, :])
     volume_df.to_csv("./output/raw_data/volumes.csv")
     color_df.to_csv("./output/raw_data/colors.csv")
 
@@ -325,15 +329,16 @@ def find_cams(num_cams):
                 ret_caps.append(i)
                 cap.release()
         except:
-                continue
-    if len(ret_caps)<num_cams:
+            continue
+    if len(ret_caps) < num_cams:
         LOG.warning(f"Found {len(ret_caps)} input video streams, but --use_cameras expects {num_cams}")
     LOG.opt(raw=True).info("Cameras found below:\n")
     for idx, camera in enumerate(device_list):
         LOG.opt(raw=True).info(str(ret_caps[idx]) + ': ' + camera[0] + '\n')
     cameras_set = False
     while not cameras_set:
-        ans = input("Input the cameras (first value from device list) you would like to use as a comma separated string eg: 0,1\n")
+        ans = input(
+            "Input the cameras (first value from device list) you would like to use as a comma separated string eg: 0,1\n")
         idxs = ans.split(',')
         try:
             idxs = [int(idx) for idx in idxs]
@@ -346,7 +351,8 @@ def find_cams(num_cams):
             if num_err:
                 continue
             elif len(idxs) != num_cams:
-                conf = input(f"Received {len(idxs)} cameras to use but --use_cameras required {num_cams}.\n Continue with {idxs} (y/n)")
+                conf = input(
+                    f"Received {len(idxs)} cameras to use but --use_cameras required {num_cams}.\n Continue with {idxs} (y/n)")
                 if conf == "y" or conf == "Y":
                     ret_caps = idxs
                     LOG.info(f"Cameras set to {ret_caps}")
@@ -365,15 +371,15 @@ def segment_video():
     args = init_args()
     input_image_path = args.input_image_path
     cam_idx = []
-    if input_image_path=="" and args.use_cameras==0:
+    if input_image_path == "" and args.use_cameras == 0:
         LOG.error('Usage: required one of --input_image_path or --use_cameras')
         return
-    elif args.use_cameras==0:
+    elif args.use_cameras == 0:
         input_image_name = ops.split(input_image_path)[1]
         if not ops.exists(input_image_path):
             LOG.error('input video path: {:s} not exists'.format(input_image_path))
             return
-    elif input_image_path=="":
+    elif input_image_path == "":
         input_image_name = "Cameras"
         cam_idx += find_cams(args.use_cameras)
         if cam_idx == []:
@@ -389,11 +395,11 @@ def segment_video():
     VESSEL_THRESH = 0.7
     vial_detector = initialize_vial_detector()
     liquid_predictor, solid_predictor = initialize_yolo(conf=args.conf, nms_iou=args.nms_iou)
-    if input_image_path=="":
+    if input_image_path == "":
         LOG.opt(raw=True).info("Since --use_cameras was used, waiting for experiment setup to complete\n")
         while True:
             ans = input("Continue? (y/n)")
-            if ans=="y" or ans=="Y":
+            if ans == "y" or ans == "Y":
                 LOG.info("To finish camera detections gracefully, press and hold the esc key to stop the analysis!")
                 break
     # create_plots((np.random.normal(size=(120, 5, 500)) * 255).astype(np.uint8),
@@ -405,22 +411,23 @@ def segment_video():
         im = cv2.resize(im, (1920, 1080))
         im = cv2.cvtColor(im, cv2.COLOR_BGR2RGB)
         vial_bbox = get_vials(im, vial_detector, VESSEL_THRESH)
-        if len(vial_bbox)==0:
+        if len(vial_bbox) == 0:
             LOG.error("Found no vials in the image")
             return
         LOG.info(f"Detected {len(vial_bbox)} vials at: {vial_bbox}")
-        uncrop_ims, crop_ims, turbidity, color, volume, seg = eval_yolo_batch([im], vial_bbox, liquid_predictor, scale=1.0, batch_size=len(vial_bbox))
+        uncrop_ims, crop_ims, turbidity, color, volume, seg = eval_yolo_batch([im], vial_bbox, liquid_predictor,
+                                                                              scale=1.0, batch_size=len(vial_bbox))
         create_plots(turbidity, volume, seg)
         crop_ims = cv2.cvtColor(crop_ims[0], cv2.COLOR_BGR2RGB)
         cv2.imwrite("./output/insseg/output.jpg", crop_ims)
         LOG.info("Detections saved at ./output/insseg/output.jpg")
         return
 
-    if input_image_path=="":
+    if input_image_path == "":
         caps = [cv2.VideoCapture(i) for i in cam_idx]
     else:
         caps = [cv2.VideoCapture(input_image_path)]
-    vial_bbox =[]
+    vial_bbox = []
     caps_opened = True
     _ = [caps_opened and cap.isOpened() for cap in caps]
     if caps_opened:
@@ -438,8 +445,8 @@ def segment_video():
         frame = np.concatenate(frames, axis=0)
         frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         vial_bbox = get_vials(frame, vial_detector, VESSEL_THRESH)
-    assert vial_bbox!=[]
-    
+    assert vial_bbox != []
+
     LOG.info(f"Detected {len(vial_bbox)} vials at: {vial_bbox}")
     # init cluster
     # create_plots((np.random.normal(size=(120, len(vial_bbox), 500))*255).astype(np.uint8), np.random.normal(size=(120, len(vial_bbox), 5)), np.random.normal(size=(120, len(vial_bbox), 5)))
@@ -449,12 +456,13 @@ def segment_video():
     LOG.info(f'Analysing Video')
     pbar = tqdm.tqdm()
     batch = []
-    batch_size=args.batch_size//(len(vial_bbox))
+    batch_size = args.batch_size // (len(vial_bbox))
     LOG.info(f"Batch size: {batch_size}")
     frame_count = 0
     turbidities, colors, volumes, segs = [], [], [], []
     if args.create_plots:
-        LOG.info("[WARNING] Plotting is very slow currently, the collected data is exporter as csv. We suggest using those instead")
+        LOG.info(
+            "[WARNING] Plotting is very slow currently, the collected data is exporter as csv. We suggest using those instead")
     while caps_opened:
         _ = [caps_opened and cap.isOpened() for cap in caps]
         ret = True
@@ -467,18 +475,19 @@ def segment_video():
         if ret:
             frame = np.concatenate(frames, axis=0)
             # frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            scale = 1920.0/1920.0
+            scale = 1920.0 / 1920.0
             frame_count += 1
             # resized_frame = cv2.resize(frame, (1920, 1080))
             resized_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             batch.append(resized_frame)
             # if frame_count%30 == 0: 
             #     vial_bbox = get_vials(resized_frame, vial_detector, VESSEL_THRESH) # vial_redetection
-            if frame_count%batch_size != 0:
+            if frame_count % batch_size != 0:
                 pbar.update(1)
                 continue
-
-            uncrop_ims, crop_ims, turbidity, color, volume, seg = eval_yolo_batch(batch, vial_bbox, liquid_predictor, scale=scale, batch_size=args.batch_size)
+            uncrop_ims, crop_ims, turbidity, color, volume, seg = eval_yolo_batch(batch, vial_bbox, liquid_predictor,
+                                                                                  scale=scale,
+                                                                                  batch_size=args.batch_size)
             turbidities.append(turbidity)
             colors.append(color)
             volumes.append(volume)
@@ -527,6 +536,7 @@ def segment_video():
     colors = np.concatenate(colors, axis=0)
     segs = np.concatenate(segs, axis=0)
     volumes = np.concatenate(volumes, axis=0)
+    volumes = append_volume_rolling(volumes)
     # LOG.info(turbidities.shape)
     # LOG.info(colors.shape)
     # LOG.info(volumes.shape)
@@ -537,6 +547,27 @@ def segment_video():
 
     return
 
+
+def append_volume_rolling(volumes, rolling_window: int = 5):
+    """
+    take average of the #rolling window previous frames and return the new array
+    :param volumes: np array (#frames, #vials, #bbox)
+    :param rolling_window: number of frames to average
+    """
+    new_array = np.zeros(volumes.shape)
+    for i in range(volumes.shape[0]):
+        num_to_average = min(i, rolling_window)
+        new_array[i] = np.mean(volumes[-num_to_average:], axis=0)
+    return new_array
+
+
+def flip_volumes(bx_volumes):
+    """
+    assume there will always be empty detected, flip the liquid volumes if there are more than 1 liquid detected
+    """
+    if len(bx_volumes) >= 2:  # Ensure at least 2 elements in the list
+        bx_volumes[1], bx_volumes[-1] = bx_volumes[-1], bx_volumes[1]  # Swap the second and last elements
+    return bx_volumes
 
 if __name__ == '__main__':
     """
