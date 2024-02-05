@@ -155,7 +155,8 @@ def eval_yolo_batch(ims, boxes, liquid_predictor, scale=1.0, batch_size=32):
     # LOG.info(colors)
     # LOG.info(turbidity)
     # LOG.info(volumes)
-    return ret_cropped, ret_uncropped, turbidity.astype(np.uint8), colors.astype(np.uint8), volumes.astype(np.float16), segs.astype(np.float16)
+    return ret_cropped, ret_uncropped, turbidity.astype(np.uint8), colors.astype(np.uint8), volumes.astype(
+        np.float16), segs.astype(np.float16)
 
 
 def get_vials(frame, vial_detector, VESSEL_THRESH):
@@ -536,7 +537,7 @@ def segment_video():
     colors = np.concatenate(colors, axis=0)
     segs = np.concatenate(segs, axis=0)
     volumes = np.concatenate(volumes, axis=0)
-    volumes = append_volume_rolling(volumes)
+    volumes = rolling_average(volumes)
     # LOG.info(turbidities.shape)
     # LOG.info(colors.shape)
     # LOG.info(volumes.shape)
@@ -548,7 +549,7 @@ def segment_video():
     return
 
 
-def append_volume_rolling(volumes, rolling_window: int = 5):
+def rolling_average(volumes, rolling_window: int = 5):
     """
     take average of the #rolling window previous frames and return the new array
     :param volumes: np array (#frames, #vials, #bbox)
@@ -556,8 +557,9 @@ def append_volume_rolling(volumes, rolling_window: int = 5):
     """
     new_array = np.zeros(volumes.shape)
     for i in range(volumes.shape[0]):
-        num_to_average = min(i, rolling_window)
-        new_array[i] = np.mean(volumes[-num_to_average:], axis=0)
+        index = i + 1
+        num_to_average = min(index, rolling_window)
+        new_array[i] = np.mean(volumes[-num_to_average+index:index], axis=0)
     return new_array
 
 
@@ -568,6 +570,7 @@ def flip_volumes(bx_volumes):
     if len(bx_volumes) >= 2:  # Ensure at least 2 elements in the list
         bx_volumes[1], bx_volumes[-1] = bx_volumes[-1], bx_volumes[1]  # Swap the second and last elements
     return bx_volumes
+
 
 if __name__ == '__main__':
     """
