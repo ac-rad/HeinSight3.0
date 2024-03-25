@@ -454,6 +454,8 @@ def segment_video():
     # save_data(np.random.normal(size=(100, 6, 200)), np.random.normal(size=(100, 6, 10, 3)), np.random.normal(size=(100, 6, 10)))
     writer1 = imageio.get_writer(f"./output/insseg/uncrop_{input_image_name.split('.')[0]}.mp4", fps=30)
     writer2 = imageio.get_writer(f"./output/insseg/crop_{input_image_name.split('.')[0]}.mp4", fps=30)
+    if input_image_name=="Cameras":
+        writer3 = imageio.get_writer(f"./output/insseg/capture_{input_image_name.split('.')[0]}.mp4", fps=30)
     LOG.info(f'Analysing Video')
     pbar = tqdm.tqdm()
     batch = []
@@ -480,6 +482,9 @@ def segment_video():
             frame_count += 1
             # resized_frame = cv2.resize(frame, (1920, 1080))
             resized_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            if input_image_name=="Cameras":
+                w_frame = cv2.resize(resized_frame, (1920, 1080))
+                writer3.append_data(w_frame)
             batch.append(resized_frame)
             # if frame_count%30 == 0: 
             #     vial_bbox = get_vials(resized_frame, vial_detector, VESSEL_THRESH) # vial_redetection
@@ -532,6 +537,8 @@ def segment_video():
             break
     writer1.close()
     writer2.close()
+    if input_image_name=="Cameras":
+        writer3.close()
     pbar.close()
     turbidities = np.concatenate(turbidities, axis=0)
     colors = np.concatenate(colors, axis=0)
