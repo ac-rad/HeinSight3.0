@@ -11,7 +11,6 @@ import torch
 import device
 import time
 from local_utils.log_util import init_logger
-from local_utils.config_utils import parse_config_utils
 import math
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
