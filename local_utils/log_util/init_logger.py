@@ -13,12 +13,12 @@ import time
 
 import loguru
 
-from local_utils.config_utils import parse_config_utils
+# from local_utils.config_utils import parse_config_utils
 
-CFG = parse_config_utils.sam_cfg
+# CFG = parse_config_utils.sam_cfg
 
 
-def get_logger(log_file_name_prefix):
+def get_logger(log_file_name_prefix, log_level='INFO'):
     """
     init logger
     :param log_file_name_prefix: log file prefix
@@ -26,16 +26,16 @@ def get_logger(log_file_name_prefix):
     """
     start_time = time.strftime('%Y-%m-%d-%H-%M-%S', time.localtime(time.time()))
     log_file_name = '{:s}_{:s}.log'.format(log_file_name_prefix, start_time)
-    log_file_path = ops.join(CFG.LOG.SAVE_DIR, log_file_name)
+    log_file_path = ops.join("./logs/", log_file_name)
 
     logger = loguru.logger
-    log_level = 'INFO'
-    if CFG.LOG.LEVEL == "DEBUG":
-        log_level = 'DEBUG'
-    elif CFG.LOG.LEVEL == "WARNING":
-        log_level = 'WARNING'
-    elif CFG.LOG.LEVEL == "ERROR":
-        log_level = 'ERROR'
+    # log_level = 'INFO'
+    # if CFG.LOG.LEVEL == "DEBUG":
+    #     log_level = 'DEBUG'
+    # elif CFG.LOG.LEVEL == "WARNING":
+    #     log_level = 'WARNING'
+    # elif CFG.LOG.LEVEL == "ERROR":
+    #     log_level = 'ERROR'
 
     logger.add(
         log_file_path,
