@@ -31,7 +31,7 @@ liquid_classes = ["Homo", "Hetero", "Empty", "Cap"]
 liquid_colors = [(189, 16, 224), (245, 166, 35), (120, 120, 120), (60, 60, 60)]
 LOG = init_logger.get_logger('instance_seg.log')
 VIAL_SIZE = 1.8  # mL
-
+MAX_DETECTIONS_PER_VIAL=5
 
 def init_args():
     """
@@ -69,10 +69,10 @@ def initialize_yolo(conf=0.5, nms_iou=0.2):
 
 
 def eval_yolo_batch(ims, boxes, liquid_predictor, scale=1.0, batch_size=32):
-    volumes = np.zeros((len(ims), len(boxes), 5))
-    segs = np.zeros((len(ims), len(boxes), 5))
+    volumes = np.zeros((len(ims), len(boxes), MAX_DETECTIONS_PER_VIAL))
+    segs = np.zeros((len(ims), len(boxes), MAX_DETECTIONS_PER_VIAL))
     turbidity = np.zeros((len(ims), len(boxes), 500))
-    colors = np.zeros((len(ims), len(boxes), 5, 3))
+    colors = np.zeros((len(ims), len(boxes), MAX_DETECTIONS_PER_VIAL, 3))
     batch = []
     ret_cropped = []
     ret_uncropped = []
@@ -139,9 +139,15 @@ def eval_yolo_batch(ims, boxes, liquid_predictor, scale=1.0, batch_size=32):
             bx_colors = sorted(bx_colors, key=lambda x: x[1])
             bx_colors = flip_volumes(bx_colors)
             for idx, vol in enumerate(bx_volumes):
+                if idx==MAX_DETECTIONS_PER_VIAL:
+                    LOG.warning("[WARNING] Detected more segments than MAX_DETECTIONS_PER_VIAL clipping the reported number of segments.")
+                    break
                 volumes[im_idx, box_idx, idx] += vol[0] * VIAL_SIZE / (1 - lowest_h)  # height in volume graph
                 segs[im_idx, box_idx, idx] += (1 - vol[2])
             for idx, col in enumerate(bx_colors):
+                if idx==MAX_DETECTIONS_PER_VIAL:
+                    LOG.warning("[WARNING] Detected more segments than MAX_DETECTIONS_PER_VIAL clipping the reported number of segments.")
+                    break
                 colors[im_idx, box_idx, idx] += col[0]
         # end = time.time()
         # LOG.info(f"Time to create visualizations {end-start}")
