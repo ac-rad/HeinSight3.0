@@ -340,7 +340,8 @@ def find_cams(num_cams):
         LOG.warning(f"Found {len(ret_caps)} input video streams, but --use_cameras expects {num_cams}")
     LOG.opt(raw=True).info("Cameras found below:\n")
     for idx, camera in enumerate(device_list):
-        LOG.opt(raw=True).info(str(ret_caps[idx]) + ': ' + camera[0] + '\n')
+        if len(camera[1]) != 0:
+            LOG.opt(raw=True).info(str(ret_caps[idx]) + ': ' + camera[0] + '\n')
     cameras_set = False
     while not cameras_set:
         ans = input(
