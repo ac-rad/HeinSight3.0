@@ -31,5 +31,8 @@ Example
 python3 main.py --input_image_path ./data/test_images/hetro_homo_cap_flash.mp4 --nms_iou 0.1 --conf 0.2 --batch_size 64 --create_plots
 ```
 
+## Dataset:
+Dataset and model statistics can be found at https://doi.org/10.5281/zenodo.11053823
+
 ## Publication:
 https://chemrxiv.org/engage/chemrxiv/article-details/65e5481f9138d231619c1879
