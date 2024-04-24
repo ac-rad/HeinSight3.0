@@ -11,6 +11,8 @@ git clone https://github.com/ultralytics/yolov5
 ```
 Install python packages via commands:
 ```
+conda create -n hte python=3.9
+conda activate hte
 cd yolov5
 pip3 install -r requirements.txt
 cd ..
