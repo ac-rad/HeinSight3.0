@@ -48,6 +48,7 @@ def init_args():
     parser.add_argument('--save_dir', type=str, default='./output/insseg')
     parser.add_argument('--use_text_prefix', action='store_true')
     parser.add_argument('--use_cameras', type=int, default=0)
+    parser.add_argument('--show_vials', action='store_true')
     return parser.parse_args()
 
 
@@ -164,10 +165,11 @@ def eval_yolo_batch(ims, boxes, liquid_predictor, scale=1.0, batch_size=32):
         np.float16), segs.astype(np.float16)
 
 
-def get_vials(frame, vial_detector, VESSEL_THRESH):
+def get_vials(frame, vial_detector, VESSEL_THRESH, show_vials=True):
     H, W, _ = frame.shape
-    results = vial_detector(frame)
-    results.save(save_dir='./output/insseg', exist_ok=True)  # saves vials images
+    results = vial_detector(frame.copy())
+    if show_vials:
+        results.save(save_dir='./output/insseg', exist_ok=True)  # saves vials images
     # LOG.info(results.xyxyn[0][:, 4])
     mask = results.xyxyn[0][:, 4] >= VESSEL_THRESH
     # LOG.info(mask)
@@ -399,7 +401,7 @@ def segment_video():
             LOG.error('input video path: {:s} not exists'.format(input_image_path))
             return
     LOG.info(f"Initializing vessel detector")
-    VESSEL_THRESH = 0.7
+    VESSEL_THRESH = 0.5
     vial_detector = initialize_vial_detector()
     liquid_predictor, solid_predictor = initialize_yolo(conf=args.conf, nms_iou=args.nms_iou)
     if input_image_path == "":
@@ -417,7 +419,7 @@ def segment_video():
         im = cv2.imread(input_image_path)
         im = cv2.resize(im, (1920, 1080))
         im = cv2.cvtColor(im, cv2.COLOR_BGR2RGB)
-        vial_bbox = get_vials(im, vial_detector, VESSEL_THRESH)
+        vial_bbox = get_vials(im, vial_detector, VESSEL_THRESH, args.show_vials)
         if len(vial_bbox) == 0:
             LOG.error("Found no vials in the image")
             return
@@ -451,7 +453,7 @@ def segment_video():
             return
         frame = np.concatenate(frames, axis=0)
         frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        vial_bbox = get_vials(frame, vial_detector, VESSEL_THRESH)
+        vial_bbox = get_vials(frame, vial_detector, VESSEL_THRESH, args.show_vials)
     assert vial_bbox != []
 
     LOG.info(f"Detected {len(vial_bbox)} vials at: {vial_bbox}")
